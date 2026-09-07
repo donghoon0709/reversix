@@ -1,0 +1,203 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #172033;
+  background: #f4f6fb;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  min-width: 320px;
+  overflow-x: hidden;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 3px;
+}
+
+.app-shell {
+  width: min(100%, 72rem);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: clamp(1rem, 3vw, 2rem);
+}
+
+.app-header,
+.app-main,
+.app-footer {
+  width: 100%;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.app-main {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.board-wrapper {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.5rem;
+  overscroll-behavior-inline: contain;
+}
+
+.board {
+  width: max-content;
+  min-width: min(100%, 22rem);
+  margin: 0 auto;
+}
+
+.board [role="row"] {
+  display: flex;
+  width: max-content;
+}
+
+.board button,
+.board-cell,
+.board-target {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+}
+
+.board-cell,
+.board-target {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.state-black,
+.state-white,
+.state-empty,
+.state-legal,
+.state-forbidden,
+.is-black,
+.is-white,
+.is-empty,
+.is-legal,
+.is-forbidden {
+  /* State classes intentionally remain available independently of color. */
+}
+
+.state-black::after,
+.is-black::after,
+.state-white::after,
+.is-white::after {
+  content: "";
+  display: block;
+  width: 72%;
+  height: 72%;
+  border-radius: 50%;
+}
+
+.state-black::after,
+.is-black::after { background: #172033; }
+.state-white::after,
+.is-white::after { background: #fff; border: 2px solid #172033; }
+
+.is-recent {
+  box-shadow: inset 0 0 0 3px #f59e0b;
+}
+
+.is-winning {
+  outline: 3px solid #dc2626;
+  outline-offset: -3px;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgb(15 23 42 / 60%);
+}
+
+.dialog,
+dialog {
+  width: min(100%, 32rem);
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+  border: 0;
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  color: inherit;
+  background: #fff;
+  box-shadow: 0 1rem 3rem rgb(15 23 42 / 25%);
+}
+
+.control-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.control,
+button.control {
+  min-height: 44px;
+  border: 1px solid #64748b;
+  border-radius: 0.5rem;
+  padding: 0.625rem 1rem;
+  color: #172033;
+  background: #fff;
+}
+
+.control.primary,
+button.control.primary {
+  border-color: #1d4ed8;
+  color: #fff;
+  background: #1d4ed8;
+}
+
+@media (max-width: 40rem) {
+  .app-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .board {
+    margin-inline: 0;
+  }
+}
