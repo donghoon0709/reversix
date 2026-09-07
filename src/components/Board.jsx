@@ -48,10 +48,11 @@ export default function Board({ state, dispatch }) {
               const value = state.provisional.board[cell]
               const occupied = value != null
               const provisionalIndex = state.provisional.placements.indexOf(cell)
-              const label = `${coordinate(cell)} ${value === BLACK ? '검은 돌' : value === WHITE ? '흰 돌' : '빈 칸'}`
+              const unavailable = occupied || Boolean(state.terminal)
+              const label = `${coordinate(cell)} ${value === BLACK ? '검은 돌' : value === WHITE ? '흰 돌' : '빈 칸'}${state.terminal ? ' 게임 종료로 착수 불가' : ''}`
               return (
                 <button
-                  aria-disabled={occupied || undefined}
+                  aria-disabled={unavailable || undefined}
                   aria-label={label}
                   className={`board-cell ${value === BLACK ? 'is-black' : value === WHITE ? 'is-white' : 'is-empty'} ${provisionalIndex >= 0 ? 'is-provisional' : ''} ${recent.has(cell) ? 'is-recent' : ''} ${winning.has(cell) ? 'is-winning' : ''}`}
                   key={cell}
