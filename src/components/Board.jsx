@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { BOARD_SIZE, BLACK, WHITE, findWinningLines } from '../game/rules.js'
+import { BOARD_SIZE, BLACK, WHITE, findWinningLines, requiredPlacements } from '../game/rules.js'
 
 function coordinate(cell) {
   return `${String.fromCharCode(65 + (cell % BOARD_SIZE))}${Math.floor(cell / BOARD_SIZE) + 1}`
@@ -33,7 +33,7 @@ export default function Board({ state, dispatch }) {
   }
 
   function place(cell) {
-    if (state.terminal || state.provisional.board[cell] != null) return
+    if (state.terminal || state.provisional.board[cell] != null || state.provisional.placements.length >= requiredPlacements(state.turnStart)) return
     dispatch({ type: 'PLACE', cell })
     setFocusCell(cell)
   }
@@ -48,8 +48,9 @@ export default function Board({ state, dispatch }) {
               const value = state.provisional.board[cell]
               const occupied = value != null
               const provisionalIndex = state.provisional.placements.indexOf(cell)
-              const unavailable = occupied || Boolean(state.terminal)
-              const label = `${coordinate(cell)} ${value === BLACK ? '검은 돌' : value === WHITE ? '흰 돌' : '빈 칸'}${state.terminal ? ' 게임 종료로 착수 불가' : ''}`
+              const quotaReached = state.provisional.placements.length >= requiredPlacements(state.turnStart)
+              const unavailable = occupied || Boolean(state.terminal) || quotaReached
+              const label = `${coordinate(cell)} ${value === BLACK ? '검은 돌' : value === WHITE ? '흰 돌' : '빈 칸'}${unavailable && !occupied ? ' 현재 턴에 착수 불가' : ''}`
               return (
                 <button
                   aria-disabled={unavailable || undefined}

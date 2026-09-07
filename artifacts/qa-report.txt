@@ -1,0 +1,42 @@
+
+> reversix@0.0.0 test
+> vitest --run
+
+
+ RUN  v2.1.9 /Users/donghoon/Desktop/Programming/reversix
+
+ ✓ src/game/rules.test.js (14 tests) 6ms
+
+ Test Files  1 passed (1)
+      Tests  14 passed (14)
+   Start at  13:48:18
+   Duration  290ms (transform 21ms, setup 0ms, collect 18ms, tests 6ms, environment 0ms, prepare 55ms)
+
+
+Running 10 tests using 4 workers
+
+  ✓   2 [chromium] › e2e/reversix.spec.js:4:3 › Reversix public UI › renders all labelled board buttons and the initial turn (538ms)
+  ✓   3 [chromium] › e2e/reversix.spec.js:42:3 › Reversix public UI › confirms a destructive new game with Cancel focused first (735ms)
+  ✓   1 [chromium] › e2e/reversix.spec.js:25:3 › Reversix public UI › opens and closes the rules dialog (786ms)
+  ✓   4 [chromium] › e2e/reversix.spec.js:11:3 › Reversix public UI › places one black stone, resets, and commits a turn (802ms)
+  ✓   5 [chromium] › e2e/reversix.spec.js:54:3 › Reversix public UI › supports keyboard board navigation (231ms)
+  ✓   9 [chromium] › e2e/reversix.spec.js:108:3 › Reversix public UI › accepts the browser reload notice when present (258ms)
+  ✓   8 [chromium] › e2e/reversix.spec.js:91:3 › Reversix public UI › keeps the board reachable at narrow viewport without document overflow (362ms)
+  ✓   7 [chromium] › e2e/reversix.spec.js:80:3 › Reversix public UI › keeps arrow navigation within all four board edges (449ms)
+  ✓   6 [chromium] › e2e/reversix.spec.js:62:3 › Reversix public UI › places with Enter and Space while retaining cell focus (587ms)
+  ✓  10 [chromium] › e2e/reversix.spec.js:115:3 › Reversix public UI › serves built assets and does not rewrite missing paths (296ms)
+
+  10 passed (4.1s)
+
+> reversix@0.0.0 build
+> vite build
+
+vite v6.4.3 building for production...
+transforming...
+✓ 31 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.47 kB │ gzip:  0.31 kB
+dist/assets/index-CxM2x2Sd.css    2.30 kB │ gzip:  0.99 kB
+dist/assets/index-CZN4RiuR.js   153.06 kB │ gzip: 49.77 kB
+✓ built in 354ms
