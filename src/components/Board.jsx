@@ -20,7 +20,7 @@ export default function Board({ state, dispatch }) {
 
   useEffect(() => {
     refs.current[focusCell]?.focus()
-  }, [focusCell])
+  }, [focusCell, state.provisional.placements.length])
 
   function move(cell, key) {
     let row = Math.floor(cell / BOARD_SIZE)
