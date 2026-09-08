@@ -1,0 +1,5 @@
+.venv/
+runs/
+*.dylib
+*.o
+__pycache__/

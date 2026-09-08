@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BOARD_SIZE, BLACK, WHITE, createInitialGame, requiredPlacements, applyPlacement, isForbiddenSecondPlacement, getLegalSecondPlacements, getLegalPlacements, hasLegalFullTurn, findWinningLines, reduceGame } from './rules.js';
+import { BOARD_SIZE, BLACK, WHITE, createInitialGame, requiredPlacements, applyPlacement, getLegalPlacements, hasLegalFullTurn, findWinningLines, reduceGame } from './rules.js';
 const N = BOARD_SIZE * BOARD_SIZE;
 const cell = (r, c) => r * BOARD_SIZE + c;
 const boardWith = (entries = []) => { const b = Array(N).fill(null); for (const [r, c, p] of entries) b[cell(r, c)] = p; return b; };
@@ -9,11 +9,11 @@ const place = (s, ...cells) => cells.reduce((x, c) => reduceGame(x, { type: 'PLA
 describe('pure placement engine', () => {
   it('starts with four center stones and black legal placements', () => {
     const game = createInitialGame();
-    expect(game.board[cell(7, 7)]).toBe(BLACK);
-    expect(game.board[cell(7, 8)]).toBe(WHITE);
-    expect(game.board[cell(8, 7)]).toBe(WHITE);
-    expect(game.board[cell(8, 8)]).toBe(BLACK);
-    expect(getLegalPlacements(game.board, BLACK)).toEqual([cell(6, 8), cell(7, 9), cell(8, 6), cell(9, 7)]);
+    expect(game.board[cell(4, 4)]).toBe(BLACK);
+    expect(game.board[cell(4, 5)]).toBe(WHITE);
+    expect(game.board[cell(5, 4)]).toBe(WHITE);
+    expect(game.board[cell(5, 5)]).toBe(BLACK);
+    expect(getLegalPlacements(game.board, BLACK)).toEqual([cell(3, 5), cell(4, 6), cell(5, 3), cell(6, 4)]);
   });
   it('flips bracketed runs in all eight directions and records each once', () => {
     const dirs = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
@@ -39,25 +39,34 @@ describe('pure placement engine', () => {
   });
 });
 
-describe('second-placement geometry', () => {
-  it('forbids opponent-only interiors of length 4, 5, and 3 is allowed', () => {
-    for (const len of [3, 4, 5]) { const b = boardWith(Array.from({ length: len }, (_, i) => [5, 1 + i, WHITE])); const forbidden = isForbiddenSecondPlacement(b, cell(5, 0), cell(5, len + 1), BLACK); expect(forbidden).toBe(len >= 4); }
+describe('second placement is unrestricted', () => {
+  it('lets a turn bracket a long opposing run, making six in one turn', () => {
+    // W W W W in a row, plus a vertical anchor so the first stone is itself legal.
+    // Under the old rule this exact pair was the banned "pincer".
+    const b = boardWith([[5, 1, WHITE], [5, 2, WHITE], [5, 3, WHITE], [5, 4, WHITE],
+                         [4, 0, WHITE], [3, 0, BLACK]]);
+    const first = reduceGame(stateFor(b, BLACK, false), { type: 'PLACE', cell: cell(5, 0) });
+    expect(first.announcement).toBe('');
+    expect(getLegalPlacements(first.provisional.board, BLACK)).toContain(cell(5, 5));
+    const second = reduceGame(first, { type: 'PLACE', cell: cell(5, 5) });
+    expect(second.announcement).toBe('');
+    expect(second.provisional.placements).toEqual([cell(5, 0), cell(5, 5)]);
+    for (let c = 0; c <= 5; c += 1) expect(second.board[cell(5, c)]).toBe(BLACK);
+    expect(findWinningLines(second.board, BLACK)).toHaveLength(1);
   });
-  it('allows gaps, friendly interiors, nonaligned and reversed order', () => {
-    const b = boardWith([[5, 1, WHITE], [5, 2, BLACK], [5, 3, WHITE], [5, 4, WHITE]]);
-    expect(isForbiddenSecondPlacement(b, cell(5, 0), cell(5, 5), BLACK)).toBe(false);
-    expect(isForbiddenSecondPlacement(b, cell(5, 0), cell(6, 2), BLACK)).toBe(false);
-    const rev = boardWith([[5, 1, WHITE], [5, 2, WHITE], [5, 3, WHITE], [5, 4, WHITE], [5, 5, BLACK]]);
-    expect(isForbiddenSecondPlacement(rev, cell(5, 5), cell(5, 0), BLACK)).toBe(true);
+  it('still requires every placement to flip at least one opposing stone', () => {
+    const b = boardWith([[5, 1, WHITE], [5, 2, WHITE], [5, 3, WHITE], [5, 4, WHITE],
+                         [4, 0, WHITE], [3, 0, BLACK]]);
+    const first = reduceGame(stateFor(b, BLACK, false), { type: 'PLACE', cell: cell(5, 0) });
+    expect(getLegalPlacements(first.provisional.board, BLACK)).not.toContain(cell(9, 9));
   });
-  it('enumerates only legal empty second placements', () => { const b = boardWith([[5, 1, WHITE], [5, 2, WHITE], [5, 3, WHITE], [5, 4, WHITE]]); expect(getLegalSecondPlacements(b, cell(5, 0), BLACK)).not.toContain(cell(5, 5)); });
 });
 
 describe('turn counts and reducer guards', () => {
   it('uses one placement on black opening, two normally, and one at the final empty cell', () => {
     const g = createInitialGame();
     expect(requiredPlacements(g.turnStart)).toBe(1);
-    const afterOpening = reduceGame(place(g, cell(6, 8)), { type: 'COMMIT_TURN' });
+    const afterOpening = reduceGame(place(g, cell(3, 5)), { type: 'COMMIT_TURN' });
     expect(afterOpening.activePlayer).toBe(WHITE);
     expect(requiredPlacements(afterOpening.turnStart)).toBe(2);
     const b = Array(N).fill(BLACK); b[N - 1] = null;
@@ -67,10 +76,10 @@ describe('turn counts and reducer guards', () => {
   });
   it('resets provisional placements including flips', () => { const s = stateFor(boardWith([[7, 6, WHITE], [7, 5, BLACK]]), BLACK, true); const p = place(s, cell(7, 7)); expect(p.board[cell(7, 6)]).toBe(BLACK); const r = reduceGame(p, { type: 'RESET_TURN' }); expect(r.board).toEqual(s.board); expect(r.provisional.placements).toEqual([]); });
   it('undoes only the latest provisional placement and restores its flips', () => {
-    let state = reduceGame(place(createInitialGame(), cell(6, 8)), { type: 'COMMIT_TURN' });
+    let state = reduceGame(place(createInitialGame(), cell(3, 5)), { type: 'COMMIT_TURN' });
     const first = getLegalPlacements(state.board, WHITE)[0];
     const afterFirst = place(state, first);
-    const second = getLegalPlacements(afterFirst.board, WHITE, first)[0];
+    const second = getLegalPlacements(afterFirst.board, WHITE)[0];
     const afterSecond = place(afterFirst, second);
 
     expect(reduceGame(afterSecond, { type: 'UNDO_PLACEMENT', cell: first })).toBe(afterSecond);
@@ -80,7 +89,7 @@ describe('turn counts and reducer guards', () => {
     expect(undone.board).toEqual(afterFirst.board);
   });
   it('guards incomplete, illegal, and excess actions', () => {
-    const first = cell(6, 8), illegal = cell(0, 0);
+    const first = cell(3, 5), illegal = cell(0, 0);
     let s = place(createInitialGame(), illegal);
     expect(s.announcement).toBe('NO_FLIPS');
     s = reduceGame(place(s, first), { type: 'COMMIT_TURN' });
@@ -89,7 +98,7 @@ describe('turn counts and reducer guards', () => {
     s = place(s, whiteFirst);
     const incomplete = reduceGame(s, { type: 'COMMIT_TURN' });
     expect(incomplete.announcement).toBe('Incomplete turn');
-    const whiteSecond = getLegalPlacements(s.provisional.board, WHITE, whiteFirst)[0];
+    const whiteSecond = getLegalPlacements(s.provisional.board, WHITE)[0];
     s = reduceGame(s, { type: 'PLACE', cell: whiteSecond });
     expect(s.provisional.placements).toHaveLength(2);
     expect(reduceGame(s, { type: 'PLACE', cell: cell(0, 0) })).toBe(s);
@@ -98,7 +107,14 @@ describe('turn counts and reducer guards', () => {
 });
 
 describe('lines, checks, and terminal resolution', () => {
-  it('finds six-line wins on horizontal, vertical, and both diagonals', () => { for (const [dr, dc] of [[0, 1], [1, 0], [1, 1], [1, -1]]) { const b = Array(N).fill(null); for (let i = 0; i < 6; i++) b[cell(7 + dr * i, 7 + dc * i)] = BLACK; expect(findWinningLines(b, BLACK).length).toBe(1); } });
+  it('finds six-line wins on horizontal, vertical, and both diagonals', () => {
+    for (const [dr, dc] of [[0, 1], [1, 0], [1, 1], [1, -1]]) {
+      const r0 = 2, c0 = dc < 0 ? BOARD_SIZE - 3 : 2;   // keep all six stones on the board
+      const b = Array(N).fill(null);
+      for (let i = 0; i < 6; i++) b[cell(r0 + dr * i, c0 + dc * i)] = BLACK;
+      expect(findWinningLines(b, BLACK).length).toBe(1);
+    }
+  });
   it('detects legal full turns and no legal turn', () => {
     expect(hasLegalFullTurn(createInitialGame().turnStart)).toBe(true);
     const b = Array(N).fill(BLACK); b[N - 1] = null;
