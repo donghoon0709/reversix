@@ -8,6 +8,7 @@ import { searchPlacement } from './game/search.js'
 import { ReversixNet } from './game/nn.js'
 
 const COMPUTER = WHITE
+const MODEL_URL = '/model/latest'
 const SEARCH_SIMS = 32          // same budget the network was trained with
 const SEARCH_CANDIDATES = 16
 const STONE_GAP_MS = 500        // pause between the two stones of one turn
@@ -26,6 +27,13 @@ export default function App() {
   const rulesButton = useRef(null), newButton = useRef(null)
   const netRef = useRef(null)
   const busy = useRef(false)
+  const [modelMissing, setModelMissing] = useState(false)
+
+  useEffect(() => {
+    fetch(`${MODEL_URL}.json`, { method: 'HEAD' })
+      .then(r => setModelMissing(!r.ok))
+      .catch(() => setModelMissing(true))
+  }, [])
 
   useEffect(() => {
     if (performance.getEntriesByType('navigation')[0]?.type === 'reload') {
@@ -39,10 +47,10 @@ export default function App() {
 
   const chooseMode = useCallback(async id => {
     setModeOpen(false)
-    if (id === 'iter24' && !netRef.current) {
+    if (id === 'net' && !netRef.current) {
       setNetStatus('신경망 불러오는 중…')
       try {
-        netRef.current = await ReversixNet.load('/model/iter24')
+        netRef.current = await ReversixNet.load(MODEL_URL)
         setNetStatus('')
       } catch (err) {
         setNetStatus(`신경망을 불러오지 못했습니다: ${err.message}`)
@@ -134,7 +142,7 @@ export default function App() {
         <p>최근 효과: {recentSummary}</p>
       </main>
       <RulesDialog open={rulesOpen} onClose={closeRules}/>
-      <ModeDialog open={modeOpen} onClose={() => { setModeOpen(false); newButton.current?.focus() }} onSelect={chooseMode}/>
+      <ModeDialog unavailable={modelMissing ? { net: '학습된 가중치가 아직 없습니다' } : {}} open={modeOpen} onClose={() => { setModeOpen(false); newButton.current?.focus() }} onSelect={chooseMode}/>
     </div>
   )
 }

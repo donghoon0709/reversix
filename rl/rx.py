@@ -4,23 +4,21 @@ import numpy as np
 
 _lib = ctypes.CDLL(os.path.join(os.path.dirname(os.path.abspath(__file__)), "librxenv.dylib"))
 
-MAXCELLS = 19 * 19
+BOARD_CELLS = 100          # the engine is compiled for a fixed 10x10 board
 
 class RxState(ctypes.Structure):
     _fields_ = [
-        ("board", ctypes.c_int8 * MAXCELLS),
+        ("board", ctypes.c_int8 * BOARD_CELLS),
         ("player", ctypes.c_int8),
-        ("checked", ctypes.c_int8),
+        ("checkBy", ctypes.c_int8),
         ("placed", ctypes.c_int8),
-        ("opening", ctypes.c_int8),
+        ("passes", ctypes.c_int8),
         ("first", ctypes.c_int16),
-        ("need", ctypes.c_int8),
+        ("turnNumber", ctypes.c_int16),
         ("terminal", ctypes.c_int8),
         ("winner", ctypes.c_int8),
-        ("turn", ctypes.c_int16),
     ]
 
-_lib.rx_config.argtypes = [ctypes.c_int, ctypes.c_int]
 _lib.rx_cells.restype = ctypes.c_int
 _lib.rx_planes.restype = ctypes.c_int
 _lib.rx_reset.argtypes = [ctypes.POINTER(RxState)]
@@ -37,9 +35,10 @@ N = 10
 K = 6
 
 def configure(n=10, k=6):
+    """The engine is fixed at 10x10 with SIX=6; kept for call-site compatibility."""
     global N, K, CELLS, PLANES
+    assert (n, k) == (10, 6), "engine is compiled for 10x10, SIX=6"
     N, K = n, k
-    _lib.rx_config(n, k)
     CELLS = _lib.rx_cells()
     PLANES = _lib.rx_planes()
     return CELLS, PLANES
@@ -126,18 +125,12 @@ class Game:
     def player(self): return int(self.st.player)
 
 
-_lib.rx_heuristic_move.argtypes = [ctypes.POINTER(RxState), ctypes.c_float, ctypes.POINTER(ctypes.c_uint32)]
-_lib.rx_heuristic_move.restype = ctypes.c_int
 _lib.rx_random_move.argtypes = [ctypes.POINTER(RxState), ctypes.POINTER(ctypes.c_uint32)]
 _lib.rx_random_move.restype = ctypes.c_int
 
 class _Rng:
     def __init__(self, seed=12345):
         self.v = ctypes.c_uint32(seed if seed else 12345)
-
-def heuristic_move(game, eps=0.0, rng=None):
-    rng = rng or _Rng()
-    return _lib.rx_heuristic_move(ctypes.byref(game.st), ctypes.c_float(eps), ctypes.byref(rng.v))
 
 def random_move(game, rng=None):
     rng = rng or _Rng()

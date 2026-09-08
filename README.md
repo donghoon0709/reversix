@@ -34,9 +34,9 @@ npm run build
 |---|---|
 | 2인 대전 | 한 기기에서 번갈아 둡니다 |
 | 컴퓨터 · 휴리스틱 | 창(window) 포텐셜로 한 턴을 통째로 평가합니다 |
-| 컴퓨터 · 학습 에이전트 | 자기대국 14,400판으로 학습한 신경망 (`rl/` 참고) |
+| 컴퓨터 · 학습 에이전트 | 자기대국으로 학습한 신경망 (`rl/` 참고). 가중치가 없으면 이 선택지는 비활성화됩니다 |
 
-학습 에이전트는 `public/model/iter24.{json,bin}`(1.8MB)을 불러와 브라우저에서 직접
+학습 에이전트는 `public/model/latest.{json,bin}`(1.8MB)을 불러와 브라우저에서 직접
 추론합니다. BatchNorm은 내보낼 때 합성곱에 접어 넣어서, `src/game/nn.js`는 conv·relu·
 잔차 덧셈만 수행합니다. 순전파 한 번에 약 66ms입니다.
 
@@ -46,16 +46,11 @@ npm run build
 
 컴퓨터는 한 턴의 두 돌을 0.5초 간격으로 차례대로 놓습니다.
 
-> **주의**: 현재 `public/model/iter24.*`는 이전 규칙(“6개 이상이면 SIX”)으로 학습한
-> 가중치입니다. 합법수·체크 방어 판정은 엔진에서 가져오므로 반칙을 두지는 않지만,
-> 정책이 지금 규칙에 맞지 않아 약합니다. `rl/`의 학습 환경(`rxenv.c`) 역시 아직 이전
-> 규칙이므로, 참조 규칙으로 다시 맞춘 뒤 재학습해야 합니다.
-
 체크포인트를 바꾸려면:
 
 ```sh
 cd rl
-.venv/bin/python export_weights.py runs/r1/ck_0024.pt ../public/model/iter24.bin ../public/model/iter24.json
+.venv/bin/python export_weights.py runs/r2/ck_0007.pt ../public/model/latest.bin ../public/model/latest.json
 ```
 
 ## Vercel

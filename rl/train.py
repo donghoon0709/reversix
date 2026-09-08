@@ -126,6 +126,8 @@ def main():
     ap.add_argument("--steps", type=int, default=0, help="fixed optimiser steps per iteration (0 = derive from --epochs)")
     ap.add_argument("--workers", type=int, default=1, help="self-play processes")
     ap.add_argument("--eval-every", type=int, default=5)
+    ap.add_argument("--ckpt-every", type=int, default=2,
+                    help="save a numbered checkpoint this often (cheap; feeds the Elo ladder)")
     ap.add_argument("--eval-games", type=int, default=500, help="games per colour")
     ap.add_argument("--eval-parallel", type=int, default=64)
     ap.add_argument("--out", type=str, default="runs/r1")
@@ -207,6 +209,7 @@ def main():
             rec["vs_random"] = round(s_r, 3)
             rec["eval_n"] = n_g
             rec["t_eval"] = round(time.time() - t2, 1)
+        if args.ckpt_every and (it + 1) % args.ckpt_every == 0:
             torch.save({"net": net.state_dict(), "iter": it, "args": vars(args)},
                        os.path.join(args.out, f"ck_{it:04d}.pt"))
         torch.save({"net": net.state_dict(), "iter": it, "args": vars(args)},

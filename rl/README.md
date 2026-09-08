@@ -32,7 +32,11 @@ cc -O3 -march=native -shared -fPIC -o librxenv.dylib rxenv.c
 | `selfplay.py` | 배치 자기대국 (여러 판을 함께 진행해 NN 호출을 묶음) |
 | `train.py` | 학습 루프 (증강·리플레이·평가·체크포인트) |
 | `baselines.py` | random / turn-level greedy 상대, 대전 함수 |
-| `verify_env.py` | **규칙 검증**: 독립 파이썬 구현과 국면 단위 대조 |
+| `verify_env.py` | **규칙 검증**: JS 엔진 트레이스와 국면 단위 대조 |
+| `verify_encoding.mjs` | **인코딩 검증**: 브라우저 에이전트가 학습 환경과 같은 평면을 보는지 대조 |
+| `bench_web_agent.mjs` | 배포된 브라우저 에이전트를 baseline과 대국 |
+| `dump_enc.py` | 위 두 검증에 쓰는 트레이스 생성 |
+| `ladder.py` | 체크포인트 간 라운드로빈 → 상대 Elo |
 | `verify_aug.py` | **증강 검증**: 규칙의 D4 불변성 확인 |
 
 ## 설계상 중요한 점
@@ -59,11 +63,22 @@ cc -O3 -march=native -shared -fPIC -o librxenv.dylib rxenv.c
 (실측: greedy 자기대국 40판이 전부 동일). Gumbel 노이즈에 더해 초반 12수는 개선된
 정책에서 샘플링합니다.
 
-## 검증 상태
+## 규칙과 검증 체인
 
-- `verify_env.py`: 8,740개 국면, 불일치 0
-- `verify_aug.py`: 3,144개 변환, 불일치 0
-- 평균 턴수 36.9 — 독립 JS/C 엔진 측정치와 일치
+규칙은 참조 구현(`nowyoullnever/ReverSIX`)을 따릅니다. **SIX는 최대 연속선이 정확히
+6개**일 때만 성립하며, 7개 이상(오버라인)은 아무 효력이 없습니다. 둘 곳이 없으면
+패스하고, 체크 없이 연속 두 번 패스하면 돌 개수로 승패를 가립니다.
+
+세 단계를 이어 붙여 검증합니다:
+
+```
+참조 엔진  ↔  src/game/rules.js     40게임 1,506국면
+rules.js   ↔  rxenv.c (학습 환경)    30게임 1,026국면
+rxenv.c    ↔  src/game/ai.js 인코딩   721국면 (9개 평면 + 합법수 마스크)
+```
+
+추가로 `stress.py`가 33만 plies에서 "진행 중인 게임에는 항상 합법수가 있다"를,
+`verify_aug.py`가 3,176개 대칭 변환에서 D4 불변성을 확인합니다. 전부 불일치 0건.
 
 ## baseline
 
@@ -72,5 +87,8 @@ cc -O3 -march=native -shared -fPIC -o librxenv.dylib rxenv.c
 | `random` | 합법수 균등 (체크 블런더는 마스크가 이미 제거) |
 | `greedy` | 턴 단위 창(window) 포텐셜 휴리스틱 |
 
-greedy vs random (각 300판, 승1·무0.5): 흑 0.83, 백 0.80. greedy는 한 판도 지지 않지만
-무승부가 34~40%인데, **상대 돌을 굶겨 착수불능(무승부)으로 만드는 전략을 스스로 찾아냅니다.**
+greedy vs random (각 400판, 승1·무0.5): 흑 0.685, 백 0.657.
+
+평가함수는 6칸이 꽉 찬 창에 점수를 주지 않고 실제 SIX만 `six_count`로 셉니다. 그래야
+오버라인을 두 창으로 이중 계산하지 않고, **자기 SIX를 7개로 늘리면 점수가 떨어지는**
+올바른 신호가 나옵니다.

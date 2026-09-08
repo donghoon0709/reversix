@@ -32,30 +32,25 @@ export function safePlacements(v, safe = true) {
   const mustDefend = v.checked && safe
   const out = []
 
-  if (placed >= 1) {
-    for (let s2 = 0; s2 < BOARD_CELLS; s2++) {
-      const a = applyPlacement(board, player, s2)
-      if (!a.ok) continue
-      if (mustDefend && hasLine(a.board, opp)) continue
-      out.push(s2)
-    }
-  } else {
-    for (let s1 = 0; s1 < BOARD_CELLS; s1++) {
-      const a = applyPlacement(board, player, s1)
-      if (!a.ok) continue
-      let ok
-      if (need === 1) {
-        ok = mustDefend ? !hasLine(a.board, opp) : true
+  for (const s1 of getLegalPlacements(board, player)) {
+    if (!mustDefend) { out.push(s1); continue }
+    const a = applyPlacement(board, player, s1)
+    let ok
+    if (placed >= 1 || need === 1) {
+      ok = !hasLine(a.board, opp)
+    } else {
+      const seconds = getLegalPlacements(a.board, player)
+      if (!seconds.length) {
+        ok = !hasLine(a.board, opp)          // the second stone is skipped
       } else {
         ok = false
-        for (let s2 = 0; s2 < BOARD_CELLS && !ok; s2++) {
+        for (const s2 of seconds) {
           const b = applyPlacement(a.board, player, s2)
-          if (!b.ok) continue
-          ok = mustDefend ? !hasLine(b.board, opp) : true
+          if (b.ok && !hasLine(b.board, opp)) { ok = true; break }
         }
       }
-      if (ok) out.push(s1)
     }
+    if (ok) out.push(s1)
   }
   if (!out.length && mustDefend) return safePlacements(v, false)  // lost anyway: play on
   return out

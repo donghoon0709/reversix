@@ -86,7 +86,7 @@ def run_selfplay(net, device, n_games, n_parallel=64, n_sim=32, m=16,
             if g.terminal:
                 w = g.winner
                 stats["B" if w == 1 else "W" if w == 2 else "D"] += 1
-                stats["turns"].append(int(g.st.turn)); stats["plies"].append(s["ply"])
+                stats["turns"].append(int(g.st.turnNumber)); stats["plies"].append(s["ply"])
                 for enc, tgt, pl in s["hist"]:
                     S.append(enc); P.append(tgt)
                     V.append(0.0 if w == 0 else (1.0 if w == pl else -1.0))

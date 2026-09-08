@@ -3,10 +3,10 @@ import { useEffect, useRef } from 'react'
 export const MODES = [
   { id: 'human', label: '2인 대전', hint: '한 기기에서 번갈아 둡니다' },
   { id: 'greedy', label: '컴퓨터 · 휴리스틱', hint: '창(window) 포텐셜로 한 턴을 통째로 평가합니다' },
-  { id: 'iter24', label: '컴퓨터 · 학습 에이전트', hint: '자기대국 14,400판으로 학습한 신경망 (iter 24)' },
+  { id: 'net', label: '컴퓨터 · 학습 에이전트', hint: '자기대국으로 학습한 신경망' },
 ]
 
-export default function ModeDialog({ open, onClose, onSelect }) {
+export default function ModeDialog({ open, onClose, onSelect, unavailable = {} }) {
   const ref = useRef(null)
   const cancelRef = useRef(null)
   useEffect(() => {
@@ -24,10 +24,11 @@ export default function ModeDialog({ open, onClose, onSelect }) {
             key={m.id}
             className="control mode-option"
             onClick={() => onSelect(m.id)}
+            disabled={!!unavailable[m.id]}
             type="button"
           >
             <strong>{m.label}</strong>
-            <small>{m.hint}</small>
+            <small>{unavailable[m.id] || m.hint}</small>
           </button>
         ))}
       </div>
