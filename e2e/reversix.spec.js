@@ -140,6 +140,18 @@ test.describe('Reversix public UI', () => {
     await expect(page.locator('button[role="gridcell"]').first()).toHaveAttribute('aria-disabled', 'true')
   })
 
+  test('marks the human own move as black in two-player mode', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('button[role="gridcell"]').nth(34).click()
+    await page.getByRole('button', { name: '턴 확정' }).click()
+    await expect(page.getByText('현재 플레이어:')).toContainText('흰색')
+    await expect(page.locator('.is-last-move')).toHaveCount(1)
+    await expect(page.getByText('직전 수 —')).toContainText('검은색')
+    // a one-stone opening turn still gets its order number
+    await expect(page.locator('.is-last-move').first()).toContainText('1')
+    await expect(page.locator('.is-last-move').first()).toHaveAttribute('aria-label', /1번째/)
+  })
+
   test('lets the human take white and moves the computer first', async ({ page }) => {
     await page.goto('/')
     await page.getByRole('button', { name: '새 게임' }).click()
@@ -299,6 +311,16 @@ test.describe('Reversix public UI', () => {
     // flipped stones are marked separately, never as the move itself
     const both = await page.locator('.is-last-move.is-recent').count()
     expect(both).toBe(0)
+    // the stone itself must render exactly like any other stone: the marker lives on the
+    // cell, never on the ::after that draws the disc
+    const marked = page.locator('.board-cell.is-last-move').first()
+    const plain = page.locator('.board-cell.is-white:not(.is-last-move):not(.is-recent)').first()
+    const shape = el => el.evaluate(n => {
+      const s = getComputedStyle(n, '::after')
+      return [s.inset, s.width, s.height, s.borderRadius, s.borderStyle]
+    })
+    expect(await shape(marked)).toEqual(await shape(plain))
+
     await expect(page.getByRole('gridcell', { name: /직전 상대 착수/ }).first()).toBeVisible()
   })
 

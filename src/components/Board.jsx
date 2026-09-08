@@ -16,7 +16,7 @@ export default function Board({ state, dispatch, locked = false }) {
     if (effect?.cell != null) lastMoves.set(effect.cell, i + 1)
     effect?.flips?.forEach(cell => lastFlips.add(cell))
   })
-  const multiMove = lastMoves.size > 1
+
   const flipping = new Map()
   state.provisional.effects.forEach(effect => {
     effect.flips.forEach(cell => flipping.set(cell, effect.player))
@@ -74,7 +74,7 @@ export default function Board({ state, dispatch, locked = false }) {
               const flippingPlayer = flipping.get(cell)
               const unavailable = !canPlace && !canUndo
               const moveOrder = lastMoves.get(cell)
-              const lastNote = moveOrder ? `, 직전 상대 착수${multiMove ? ` ${moveOrder}번째` : ''}`
+              const lastNote = moveOrder ? `, 직전 상대 착수 ${moveOrder}번째`
                 : lastFlips.has(cell) ? ', 직전 착수로 뒤집힘' : ''
               const banNote = isForbidden ? ' 금수: 상대에게 SIX를 만들어 줍니다' : ''
               const label = `${coordinate(cell)} ${value === BLACK ? '검은 돌' : value === WHITE ? '흰 돌' : '빈 칸'}${lastNote}${canUndo ? ' 최신 착수 취소 가능' : !occupied ? canPlace ? ' 현재 턴에 착수 가능' : banNote || ' 현재 턴에 착수 불가' : ''}`
@@ -103,7 +103,7 @@ export default function Board({ state, dispatch, locked = false }) {
                 >
                   {isForbidden && <span className="ban-mark" aria-hidden="true">🚫</span>}
                   {provisionalIndex >= 0 && <small>{provisionalIndex + 1}</small>}
-                  {provisionalIndex < 0 && moveOrder && multiMove && <small className="last-order">{moveOrder}</small>}
+                  {provisionalIndex < 0 && moveOrder && <small>{moveOrder}</small>}
                 </button>
               )
             })}
