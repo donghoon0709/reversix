@@ -21,6 +21,7 @@ static const int AXR[4]={0,1,1,-1}, AXC[4]={1,0,1,1};
 
 typedef struct {
   int8_t  board[CELLS];
+  int8_t  turnStart[CELLS];   // board as it stood when this turn began (ban baseline)
   int8_t  player;      // side to move
   int8_t  checkBy;     // player who gave check (0 = none); the defender is the mover
   int8_t  placed;      // stones placed so far this turn
@@ -63,6 +64,37 @@ static int six_count(const int8_t*b,int p){
     } }
   return cnt;
 }
+static void apply_move(int8_t*b,int p,int s);
+/* signatures of p's six lines, as "first cell + axis", so a replaced six is not mistaken
+   for the same one */
+static int six_sigs(const int8_t*b,int p,int*out){
+  int n=0;
+  for(int a=0;a<4;a++){ int dr=AXR[a],dc=AXC[a];
+    for(int r=0;r<N;r++) for(int c=0;c<N;c++){
+      if(b[IDX(r,c)]!=p) continue;
+      if(IN(r-dr,c-dc)&&b[IDX(r-dr,c-dc)]==p) continue;
+      int len=0,rr=r,cc=c;
+      while(IN(rr,cc)&&b[IDX(rr,cc)]==p){len++;rr+=dr;cc+=dc;}
+      if(len==SIXLEN) out[n++]=IDX(r,c)*4+a;
+    } }
+  return n;
+}
+/* A placement is forbidden when it hands the opponent a SIX that was not on the board
+   when the turn began: shrinking an opposing overline of seven leaves exactly six. */
+static int is_forbidden(const RxState*s,int p,int cell){
+  int8_t t[CELLS]; memcpy(t,s->board,CELLS);
+  int fl[CELLS]; if(!flips_of(t,p,cell,fl)) return 0;
+  apply_move(t,p,cell);
+  int o=OTHER(p);
+  int before[64], nb=six_sigs(s->turnStart,o,before);
+  int after[64],  na=six_sigs(t,o,after);
+  for(int i=0;i<na;i++){
+    int seen=0;
+    for(int j=0;j<nb;j++) if(before[j]==after[i]){ seen=1; break; }
+    if(!seen) return 1;
+  }
+  return 0;
+}
 static void six_cells(const int8_t*b,int p,uint8_t*out){
   memset(out,0,CELLS);
   for(int a=0;a<4;a++){ int dr=AXR[a],dc=AXC[a];
@@ -79,12 +111,18 @@ static void apply_move(int8_t*b,int p,int s){
   b[s]=(int8_t)p; for(int i=0;i<k;i++) b[fl[i]]=(int8_t)p;
 }
 /* stones still expected this turn, accounting for the skip */
+static int playable_count(const RxState*s);
 static int need_of(const RxState*s){
   if(s->turnNumber==0) return 1;
-  if(s->placed==1){ int mv[CELLS]; return legal_moves(s->board,s->player,mv)?2:1; }
+  if(s->placed==1) return playable_count(s)?2:1;
   return 2;
 }
 
+static int playable_count(const RxState*s){
+  int mv[CELLS], n=legal_moves(s->board,s->player,mv), c=0;
+  for(int i=0;i<n;i++) if(!is_forbidden(s,s->player,mv[i])) c++;
+  return c;
+}
 void rx_reset(RxState*s);
 static void finish_turn(RxState*s){
   int mover=s->player, opp=OTHER(mover);
@@ -93,10 +131,11 @@ static void finish_turn(RxState*s){
   s->player=(int8_t)opp;
   s->turnNumber++;
   s->placed=0; s->first=-1;
+  memcpy(s->turnStart,s->board,CELLS);
 }
 static void settle_passes(RxState*s){
   int mv[CELLS];
-  while(!s->terminal && legal_moves(s->board,s->player,mv)==0){
+  while(!s->terminal && playable_count(s)==0){
     s->passes++;
     finish_turn(s);
     if(!s->terminal && s->passes>=2 && !s->checkBy){
@@ -111,6 +150,7 @@ void rx_reset(RxState*s){
   s->board[44]=WHITE; s->board[55]=WHITE; s->board[45]=BLACK; s->board[54]=BLACK;
   s->player=BLACK; s->checkBy=0; s->placed=0; s->passes=0;
   s->first=-1; s->turnNumber=0; s->terminal=0; s->winner=0;
+  memcpy(s->turnStart,s->board,CELLS);
   settle_passes(s);
 }
 
@@ -125,6 +165,7 @@ int rx_legal(const RxState*s, uint8_t*mask, int safe){
   int mustDefend = safe && s->checkBy && s->checkBy==OTHER(p);
   int need=need_of(s);
   for(int i=0;i<n;i++){
+    if(is_forbidden(s,p,mv[i])) continue;          /* would gift the opponent a SIX */
     if(!mustDefend){ mask[mv[i]]=1; cnt++; continue; }
     int8_t t[CELLS]; memcpy(t,s->board,CELLS); apply_move(t,p,mv[i]);
     int ok=0;
@@ -233,7 +274,10 @@ int rx_greedy_turn(const RxState*s,int32_t*out,float eps,uint32_t*rngstate){
         if(nCand<40000){ c1[nCand]=mv[i]; c2[nCand]=-1; sc[nCand]=eval_board(t,p); nCand++; }
         continue;
       }
-      int m2=legal_moves(t,p,mv2);
+      /* the ban applies to the second stone too, against the same turn-start baseline */
+      RxState tmp=*s; memcpy(tmp.board,t,CELLS); tmp.placed=1;
+      int mAll=legal_moves(t,p,mv2), m2=0;
+      for(int j=0;j<mAll;j++) if(!is_forbidden(&tmp,p,mv2[j])) mv2[m2++]=mv2[j];
       if(!m2){                                     /* second stone skipped */
         if(wantDefence && six_count(t,s->checkBy)) continue;
         if(nCand<40000){ c1[nCand]=mv[i]; c2[nCand]=-1; sc[nCand]=eval_board(t,p); nCand++; }

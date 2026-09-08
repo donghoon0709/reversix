@@ -7,7 +7,6 @@ import { viewOf, greedyTurn } from './game/ai.js'
 import { searchPlacement } from './game/search.js'
 import { ReversixNet } from './game/nn.js'
 
-const COMPUTER = WHITE
 const MODEL_URL = '/model/latest'
 const SEARCH_SIMS = 32          // same budget the network was trained with
 const SEARCH_CANDIDATES = 16
@@ -21,6 +20,7 @@ export default function App() {
   const [rulesOpen, setRulesOpen] = useState(false)
   const [modeOpen, setModeOpen] = useState(false)
   const [mode, setMode] = useState('human')
+  const [humanSide, setHumanSide] = useState(BLACK)
   const [thinking, setThinking] = useState(false)
   const [netStatus, setNetStatus] = useState('')
   const [progress, setProgress] = useState(null)
@@ -45,7 +45,7 @@ export default function App() {
   const closeRules = () => { setRulesOpen(false); rulesButton.current?.focus() }
   const openNew = () => { newButton.current = document.activeElement; setModeOpen(true) }
 
-  const chooseMode = useCallback(async id => {
+  const chooseMode = useCallback(async (id, side) => {
     setModeOpen(false)
     if (id === 'net' && !netRef.current) {
       setNetStatus('신경망 불러오는 중…')
@@ -59,11 +59,13 @@ export default function App() {
       }
     }
     setMode(id)
+    setHumanSide(side === 'white' ? WHITE : BLACK)
     dispatch({ type: 'NEW_GAME' })
     newButton.current?.focus()
   }, [])
+  const computerSide = humanSide === BLACK ? WHITE : BLACK
 
-  const computerToMove = mode !== 'human' && state.activePlayer === COMPUTER && !state.terminal
+  const computerToMove = mode !== 'human' && state.activePlayer === computerSide && !state.terminal
 
   // The computer places one stone at a time so the two stones of a turn are visible
   // separately; the search itself yields to the event loop so the board stays responsive.
@@ -125,7 +127,7 @@ export default function App() {
       </header>
       <main className="app-main">
         <section aria-live="polite">
-          <p>모드: <strong>{modeLabel}</strong>{mode !== 'human' && <> · 컴퓨터는 {label(COMPUTER)}</>}</p>
+          <p>모드: <strong>{modeLabel}</strong>{mode !== 'human' && <> · 나는 {label(humanSide)}, 컴퓨터는 {label(computerSide)}</>}</p>
           <p>현재 플레이어: <strong>{label(state.activePlayer)}</strong>{thinking && <span className="thinking"> · 생각 중{progress ? ` ${progress[0]}/${progress[1]}` : ''}…</span>}</p>
           <p>필요한 배치: {need} / 현재 배치: {state.provisional.placements.length}</p>
           {lastMove && <p className="last-move-line">직전 수 — <strong>{label(lastMove.who)}</strong> {lastMove.cells.map(coord).join(' → ')}</p>}
@@ -142,7 +144,7 @@ export default function App() {
         <p>최근 효과: {recentSummary}</p>
       </main>
       <RulesDialog open={rulesOpen} onClose={closeRules}/>
-      <ModeDialog unavailable={modelMissing ? { net: '학습된 가중치가 아직 없습니다' } : {}} open={modeOpen} onClose={() => { setModeOpen(false); newButton.current?.focus() }} onSelect={chooseMode}/>
+      <ModeDialog unavailable={modelMissing ? { net: '학습된 가중치가 아직 없습니다' } : {}} open={modeOpen} onClose={() => { setModeOpen(false); newButton.current?.focus() }} onStart={chooseMode}/>
     </div>
   )
 }

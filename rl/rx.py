@@ -9,6 +9,7 @@ BOARD_CELLS = 100          # the engine is compiled for a fixed 10x10 board
 class RxState(ctypes.Structure):
     _fields_ = [
         ("board", ctypes.c_int8 * BOARD_CELLS),
+        ("turnStart", ctypes.c_int8 * BOARD_CELLS),
         ("player", ctypes.c_int8),
         ("checkBy", ctypes.c_int8),
         ("placed", ctypes.c_int8),

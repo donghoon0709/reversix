@@ -14,8 +14,11 @@ def transform_idx(i, k, flip):
     if flip: a = a[:, ::-1]
     return int(np.nonzero(np.ascontiguousarray(a).reshape(-1) == i)[0][0])
 
-def set_state(g, board, player, checked, placed, first, turn):
-    for i in range(N * N): g.st.board[i] = int(board[i])
+def set_state(g, board, turn_start, player, checked, placed, first, turn):
+    """turn_start is the ban baseline and must be transformed alongside the board."""
+    for i in range(N * N):
+        g.st.board[i] = int(board[i])
+        g.st.turnStart[i] = int(turn_start[i])
     g.st.player, g.st.checkBy, g.st.placed = player, checked, placed
     g.st.first, g.st.turnNumber, g.st.terminal = first, turn, 0
     return g
@@ -31,6 +34,7 @@ for trial in range(400):
         g.step(int(rng.choice(np.nonzero(m)[0].tolist())))
     if g.terminal: continue
     b0 = np.frombuffer(bytes(g.st.board), dtype=np.int8, count=N*N).copy()
+    t0b = np.frombuffer(bytes(g.st.turnStart), dtype=np.int8, count=N*N).copy()
     st0 = (g.st.player, g.st.checkBy, g.st.placed, g.st.first, g.st.turnNumber)
     m0, _ = g.legal(1)
     base = set(np.nonzero(m0)[0].tolist())
@@ -38,8 +42,9 @@ for trial in range(400):
     for k in range(4):
         for flip in (0, 1):
             b1 = transform_board(b0, k, flip)
+            t1 = transform_board(t0b, k, flip)
             f1 = transform_idx(st0[3], k, flip) if st0[3] >= 0 else -1
-            g2 = set_state(rx.Game(), b1, st0[0], st0[1], st0[2], f1, st0[4])
+            g2 = set_state(rx.Game(), b1, t1, st0[0], st0[1], st0[2], f1, st0[4])
             m1, _ = g2.legal(1)
             got = set(np.nonzero(m1)[0].tolist())
             want = {transform_idx(i, k, flip) for i in base}

@@ -209,7 +209,8 @@ def main():
             rec["vs_random"] = round(s_r, 3)
             rec["eval_n"] = n_g
             rec["t_eval"] = round(time.time() - t2, 1)
-        if args.ckpt_every and (it + 1) % args.ckpt_every == 0:
+        # save on even iterations (4, 6, 8, ...) so the Elo ladder gets evenly spaced rungs
+        if args.ckpt_every and it % args.ckpt_every == 0:
             torch.save({"net": net.state_dict(), "iter": it, "args": vars(args)},
                        os.path.join(args.out, f"ck_{it:04d}.pt"))
         torch.save({"net": net.state_dict(), "iter": it, "args": vars(args)},

@@ -57,6 +57,34 @@ export function getLegalPlacements(board, player) {
   return out;
 }
 
+/** Identity of a six line, so "the same six" can be told from "a new six". */
+const signature = line => line.join(',');
+export function sixSignatures(board, player) {
+  return new Set(getSixLines(board, player).map(signature));
+}
+
+/**
+ * A placement is forbidden when it would hand the opponent a SIX they did not have when
+ * the turn began. Shrinking an opposing overline of seven leaves exactly six behind, so
+ * without this you could gift the opponent a check with your own stone.
+ * Sixes that were already on the board (the ones a check obliges you to break) are the
+ * baseline and never count as newly given.
+ */
+export function isForbiddenPlacement(turnStartBoard, board, player, cell) {
+  const a = placementEffect(board, player, cell);
+  if (!a.ok) return false;
+  const opp = opponent(player);
+  const before = sixSignatures(turnStartBoard, opp);
+  for (const line of getSixLines(a.board, opp)) if (!before.has(signature(line))) return true;
+  return false;
+}
+
+/** Legal placements minus the forbidden ones — what the player may actually play. */
+export function getPlayablePlacements(turnStartBoard, board, player) {
+  return getLegalPlacements(board, player)
+    .filter(cell => !isForbiddenPlacement(turnStartBoard, board, player, cell));
+}
+
 /** Maximal runs of EXACTLY six. An overline of seven or more is not a SIX. */
 export function getSixLines(board, player) {
   const lines = [];
@@ -83,8 +111,17 @@ const baseNeed = turnNumber => (turnNumber === 0 ? 1 : 2);
 export function placementsNeeded(state) {
   const base = baseNeed(state.turnStart.turnNumber);
   if (base === 2 && state.provisional.placements.length === 1
-      && !getLegalPlacements(state.provisional.board, state.activePlayer).length) return 1;
+      && !playableFor(state).length) return 1;
   return base;
+}
+/** Cells the side to move may play right now, forbidden ones already removed. */
+export function playableFor(state) {
+  return getPlayablePlacements(state.turnStart.board, state.provisional.board, state.activePlayer);
+}
+export function forbiddenFor(state) {
+  const board = state.provisional.board, player = state.activePlayer;
+  return getLegalPlacements(board, player)
+    .filter(cell => isForbiddenPlacement(state.turnStart.board, board, player, cell));
 }
 export function turnComplete(state) {
   return state.provisional.placements.length >= placementsNeeded(state);
@@ -112,7 +149,9 @@ function finishTurn(s, events) {
 
 /** Pass for as long as the player to move has nothing legal. Mutates `s`. */
 function settlePasses(s, events) {
-  while (!s.terminal && !getLegalPlacements(s.board, s.activePlayer).length) {
+  // at the start of a turn the current board IS the baseline, so only newly created
+  // opposing sixes are forbidden
+  while (!s.terminal && !getPlayablePlacements(s.board, s.board, s.activePlayer).length) {
     events.push(`${s.activePlayer} PASS`);
     s.consecutivePasses += 1;
     finishTurn(s, events);
@@ -175,6 +214,8 @@ export function reduceGame(state, action) {
     if (turnComplete(state)) return state;
     const a = placementEffect(state.provisional.board, state.activePlayer, action.cell);
     if (!a.ok) return { ...state, announcement: a.reason };
+    if (isForbiddenPlacement(state.turnStart.board, state.provisional.board, state.activePlayer, action.cell))
+      return { ...state, announcement: 'FORBIDDEN_GIVES_SIX' };
     const provisional = {
       placements: [...state.provisional.placements, action.cell],
       effects: [...state.provisional.effects, a.effect],

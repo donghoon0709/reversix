@@ -1,6 +1,6 @@
 #!/bin/zsh
 cd /Users/donghoon/Desktop/Programming/reversix/rl
-LOG=runs/r2/log.jsonl
+LOG=runs/r3/log.jsonl
 last=0
 [ -f "$LOG" ] && last=$(wc -l < "$LOG" | tr -d ' ')
 echo "monitor armed: $last iterations already logged, watching for more"
@@ -15,7 +15,7 @@ while true; do
   fi
   if ! pgrep -f "[t]rain.py" >/dev/null; then
     echo "TRAINING STOPPED after $last iterations (process gone)"
-    grep -E "Traceback|Error|error:|Killed|MemoryError" runs/r2.log | tail -3
+    grep -E "Traceback|Error|error:|Killed|MemoryError" runs/r3.log | tail -3
     break
   fi
   sleep 30

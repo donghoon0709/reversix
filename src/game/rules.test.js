@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   BOARD_SIZE, BOARD_CELLS, SIX, BLACK, WHITE, createInitialGame, placementsNeeded, turnComplete,
   applyPlacement, getLegalPlacements, getSixLines, reduceGame,
+  isForbiddenPlacement, getPlayablePlacements, playableFor, forbiddenFor,
 } from './rules.js';
 
 const cell = (r, c) => r * BOARD_SIZE + c;
@@ -93,6 +94,51 @@ describe('turn structure', () => {
     const undone = reduceGame(one, { type: 'UNDO_PLACEMENT', cell: first });
     expect(undone.provisional.placements).toEqual([]);
     expect(undone.board).toEqual(g.board);
+  });
+});
+
+describe('forbidden placements (may not hand the opponent a SIX)', () => {
+  // white holds an overline of seven, which counts for nothing; shrinking it to exactly
+  // six would create a real SIX for white
+  const overlineBoard = () => {
+    const b = Array(BOARD_CELLS).fill(null);
+    for (let c = 2; c <= 8; c++) b[cell(4, c)] = WHITE;
+    b[cell(2, 2)] = BLACK; b[cell(5, 2)] = BLACK;
+    return b;
+  };
+
+  it('bans the stone that shrinks an opposing overline into a six', () => {
+    const b = overlineBoard();
+    expect(getSixLines(b, WHITE)).toHaveLength(0);
+    const s = stateFor(b, BLACK);
+    expect(getLegalPlacements(b, BLACK)).toContain(cell(3, 2));
+    expect(forbiddenFor(s)).toEqual([cell(3, 2)]);
+    expect(playableFor(s)).not.toContain(cell(3, 2));
+    expect(isForbiddenPlacement(b, b, BLACK, cell(3, 2))).toBe(true);
+  });
+
+  it('refuses the move in the reducer', () => {
+    const s = stateFor(overlineBoard(), BLACK);
+    const after = reduceGame(s, { type: 'PLACE', cell: cell(3, 2) });
+    expect(after.announcement).toBe('FORBIDDEN_GIVES_SIX');
+    expect(after.provisional.placements).toEqual([]);
+  });
+
+  it('does not ban breaking a six that was already there', () => {
+    // white already has an exact six: black is obliged to break it, not banned from touching it
+    const b = Array(BOARD_CELLS).fill(null);
+    for (let c = 2; c <= 7; c++) b[cell(4, c)] = WHITE;
+    b[cell(2, 2)] = BLACK; b[cell(5, 2)] = BLACK;
+    expect(getSixLines(b, WHITE)).toHaveLength(1);
+    const s = stateFor(b, BLACK, 3, BLACK);
+    expect(forbiddenFor(s)).toEqual([]);
+    expect(playableFor(s)).toContain(cell(3, 2));
+  });
+
+  it('leaves ordinary positions untouched', () => {
+    const g = createInitialGame();
+    expect(forbiddenFor(g)).toEqual([]);
+    expect(playableFor(g)).toEqual(getLegalPlacements(g.board, BLACK));
   });
 });
 

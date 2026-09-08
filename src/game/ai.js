@@ -2,7 +2,7 @@
 // (rl/rxenv.c rx_encode) exactly, or the network sees a different game.
 import {
   BOARD_SIZE, BOARD_CELLS, SIX, BLACK, WHITE,
-  applyPlacement, getSixLines, placementsNeeded, getLegalPlacements,
+  applyPlacement, getSixLines, placementsNeeded, getPlayablePlacements,
 } from './rules.js'
 
 const N = BOARD_SIZE
@@ -12,6 +12,7 @@ const hasLine = (board, p) => getSixLines(board, p).length > 0
 /** What the agent needs to know about the position, pulled out of the reducer state. */
 export function viewOf(state) {
   return {
+    turnStartBoard: state.turnStart.board,
     board: state.provisional.board,
     player: state.activePlayer,
     checked: state.checkedPlayer === state.activePlayer,
@@ -32,14 +33,14 @@ export function safePlacements(v, safe = true) {
   const mustDefend = v.checked && safe
   const out = []
 
-  for (const s1 of getLegalPlacements(board, player)) {
+  for (const s1 of getPlayablePlacements(v.turnStartBoard, board, player)) {
     if (!mustDefend) { out.push(s1); continue }
     const a = applyPlacement(board, player, s1)
     let ok
     if (placed >= 1 || need === 1) {
       ok = !hasLine(a.board, opp)
     } else {
-      const seconds = getLegalPlacements(a.board, player)
+      const seconds = getPlayablePlacements(v.turnStartBoard, a.board, player)
       if (!seconds.length) {
         ok = !hasLine(a.board, opp)          // the second stone is skipped
       } else {
@@ -126,7 +127,7 @@ export function greedyTurn(v) {
         consider([s1], a.board)
         continue
       }
-      for (let s2 = 0; s2 < BOARD_CELLS; s2++) {
+      for (const s2 of getPlayablePlacements(v.turnStartBoard, a.board, player)) {
         const b = applyPlacement(a.board, player, s2)
         if (!b.ok) continue
         if (mustDefend && hasLine(b.board, opp)) continue

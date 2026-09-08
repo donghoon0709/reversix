@@ -35,6 +35,7 @@ cc -O3 -march=native -shared -fPIC -o librxenv.dylib rxenv.c
 | `verify_env.py` | **규칙 검증**: JS 엔진 트레이스와 국면 단위 대조 |
 | `verify_encoding.mjs` | **인코딩 검증**: 브라우저 에이전트가 학습 환경과 같은 평면을 보는지 대조 |
 | `bench_web_agent.mjs` | 배포된 브라우저 에이전트를 baseline과 대국 |
+| `check_ban_compliance.py` | 스크립트 상대들이 금수를 두지 않는지 확인 |
 | `dump_enc.py` | 위 두 검증에 쓰는 트레이스 생성 |
 | `ladder.py` | 체크포인트 간 라운드로빈 → 상대 Elo |
 | `verify_aug.py` | **증강 검증**: 규칙의 D4 불변성 확인 |
@@ -65,9 +66,13 @@ cc -O3 -march=native -shared -fPIC -o librxenv.dylib rxenv.c
 
 ## 규칙과 검증 체인
 
-규칙은 참조 구현(`nowyoullnever/ReverSIX`)을 따릅니다. **SIX는 최대 연속선이 정확히
-6개**일 때만 성립하며, 7개 이상(오버라인)은 아무 효력이 없습니다. 둘 곳이 없으면
-패스하고, 체크 없이 연속 두 번 패스하면 돌 개수로 승패를 가립니다.
+규칙은 참조 구현(`nowyoullnever/ReverSIX`)을 따르되 **금수 규칙 하나를 더합니다**.
+SIX는 최대 연속선이 정확히 6개일 때만 성립하고 7개 이상(오버라인)은 무효입니다.
+그래서 상대 오버라인의 끝을 뒤집으면 정확히 6개가 남아 **상대에게 SIX를 만들어 주게**
+되는데, 그런 자리는 둘 수 없습니다. 기준선은 턴 시작 시점의 보드이므로, 체크 방어 중
+이미 존재하던 상대 SIX는 금수 판정에 포함되지 않습니다.
+
+둘 곳이 없으면 패스하고, 체크 없이 연속 두 번 패스하면 돌 개수로 승패를 가립니다.
 
 세 단계를 이어 붙여 검증합니다:
 
