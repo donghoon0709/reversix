@@ -1,18 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
-import { BOARD_SIZE, BLACK, WHITE, findWinningLines, getLegalPlacements, requiredPlacements } from '../game/rules.js'
+import { BOARD_SIZE, BLACK, WHITE, findWinningLines, placeableFor, requiredPlacements } from '../game/rules.js'
 
 function coordinate(cell) {
   return `${String.fromCharCode(65 + (cell % BOARD_SIZE))}${Math.floor(cell / BOARD_SIZE) + 1}`
 }
 
-export default function Board({ state, dispatch }) {
+export default function Board({ state, dispatch, locked = false }) {
   const [focusCell, setFocusCell] = useState(0)
   const refs = useRef([])
-  const recent = new Set()
-  state.recentEffects?.forEach(effect => {
-    if (effect?.cell != null) recent.add(effect.cell)
-    effect?.flips?.forEach(cell => recent.add(cell))
+  // Separate the stones the opponent actually placed from the stones those moves flipped:
+  // the placements are the move, the flips are its consequence.
+  const lastMoves = new Map()          // cell -> order within the turn (1-based)
+  const lastFlips = new Set()
+  state.recentEffects?.forEach((effect, i) => {
+    if (effect?.cell != null) lastMoves.set(effect.cell, i + 1)
+    effect?.flips?.forEach(cell => lastFlips.add(cell))
   })
+  const multiMove = lastMoves.size > 1
   const flipping = new Map()
   state.provisional.effects.forEach(effect => {
     effect.flips.forEach(cell => flipping.set(cell, effect.player))
@@ -25,9 +29,9 @@ export default function Board({ state, dispatch }) {
   const quotaReached = state.provisional.placements.length >= requiredPlacements(state.turnStart)
   const latestProvisional = state.provisional.placements.at(-1)
   const legal = new Set(
-    state.terminal || quotaReached
+    state.terminal || quotaReached || locked
       ? []
-      : getLegalPlacements(state.provisional.board, state.activePlayer, state.provisional.placements[0] ?? null),
+      : placeableFor(state),
   )
 
   useEffect(() => {
@@ -57,7 +61,7 @@ export default function Board({ state, dispatch }) {
 
   return (
     <div className="board-wrapper">
-      <div className="board" role="grid" aria-label="15×15 Reversix game board">
+      <div className="board" role="grid" aria-label={`${BOARD_SIZE}×${BOARD_SIZE} Reversix game board`}>
         {Array.from({ length: BOARD_SIZE }, (_, row) => (
           <div role="row" key={row}>
             {Array.from({ length: BOARD_SIZE }, (_, column) => {
@@ -69,12 +73,15 @@ export default function Board({ state, dispatch }) {
               const canUndo = cell === latestProvisional
               const flippingPlayer = flipping.get(cell)
               const unavailable = !canPlace && !canUndo
-              const label = `${coordinate(cell)} ${value === BLACK ? '검은 돌' : value === WHITE ? '흰 돌' : '빈 칸'}${canUndo ? ' 최신 착수 취소 가능' : !occupied ? canPlace ? ' 현재 턴에 착수 가능' : ' 현재 턴에 착수 불가' : ''}`
+              const moveOrder = lastMoves.get(cell)
+              const lastNote = moveOrder ? `, 직전 상대 착수${multiMove ? ` ${moveOrder}번째` : ''}`
+                : lastFlips.has(cell) ? ', 직전 착수로 뒤집힘' : ''
+              const label = `${coordinate(cell)} ${value === BLACK ? '검은 돌' : value === WHITE ? '흰 돌' : '빈 칸'}${lastNote}${canUndo ? ' 최신 착수 취소 가능' : !occupied ? canPlace ? ' 현재 턴에 착수 가능' : ' 현재 턴에 착수 불가' : ''}`
               return (
                 <button
                   aria-disabled={unavailable || undefined}
                   aria-label={label}
-                  className={`board-cell ${value === BLACK ? 'is-black' : value === WHITE ? 'is-white' : 'is-empty'} ${canPlace ? 'is-legal' : ''} ${provisionalIndex >= 0 ? 'is-provisional' : ''} ${flippingPlayer ? `is-flipping is-flipping-to-${flippingPlayer === BLACK ? 'black' : 'white'}` : ''} ${recent.has(cell) ? 'is-recent' : ''} ${winning.has(cell) ? 'is-winning' : ''}`}
+                  className={`board-cell ${value === BLACK ? 'is-black' : value === WHITE ? 'is-white' : 'is-empty'} ${canPlace ? 'is-legal' : ''} ${provisionalIndex >= 0 ? 'is-provisional' : ''} ${flippingPlayer ? `is-flipping is-flipping-to-${flippingPlayer === BLACK ? 'black' : 'white'}` : ''} ${moveOrder ? 'is-last-move' : ''} ${lastFlips.has(cell) ? 'is-recent' : ''} ${winning.has(cell) ? 'is-winning' : ''}`}
                   data-flip-epoch={flippingPlayer ? flipEpoch : undefined}
                   key={flippingPlayer ? `${cell}-${flipEpoch}` : cell}
                   onClick={() => place(cell)}
@@ -94,6 +101,7 @@ export default function Board({ state, dispatch }) {
                   type="button"
                 >
                   {provisionalIndex >= 0 && <small>{provisionalIndex + 1}</small>}
+                  {provisionalIndex < 0 && moveOrder && multiMove && <small className="last-order">{moveOrder}</small>}
                 </button>
               )
             })}
