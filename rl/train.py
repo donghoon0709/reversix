@@ -4,6 +4,7 @@ import numpy as np, torch, torch.nn.functional as F
 import torch.multiprocessing as mp
 import rx, net as netmod, baselines as B
 from evaluate import evaluate
+from gauge import gauge, load_panel
 from selfplay import run_selfplay
 from mcts import GumbelSearch
 from selfplay import Evaluator
@@ -130,6 +131,8 @@ def main():
                     help="save a numbered checkpoint this often (cheap; feeds the Elo ladder)")
     ap.add_argument("--eval-games", type=int, default=500, help="games per colour")
     ap.add_argument("--eval-parallel", type=int, default=64)
+    ap.add_argument("--gauge-games", type=int, default=15,
+                    help="games per colour against each Elo reference (0 disables)")
     ap.add_argument("--out", type=str, default="runs/r1")
     ap.add_argument("--resume", type=str, default="")
     ap.add_argument("--save-buffer", type=int, default=200_000,
@@ -155,6 +158,7 @@ def main():
     cfg = {"n": args.n, "k": args.k, "ch": args.ch, "blocks": args.blocks,
            "parallel": args.parallel, "sims": args.sims, "m": args.m}
     pool = (mp.get_context("spawn").Pool(args.workers) if args.workers > 1 else None)
+    panel = load_panel(dev) if args.gauge_games else None
     log_path = os.path.join(args.out, "log.jsonl")
     print(f"device={dev} board={args.n}x{args.n} K={args.k} net=ch{args.ch}x{args.blocks} "
           f"sims={args.sims} m={args.m}", flush=True)
@@ -208,6 +212,13 @@ def main():
             rec["vs_greedy_ci"] = round(1.96 * (0.25 / n_g) ** 0.5, 3)
             rec["vs_random"] = round(s_r, 3)
             rec["eval_n"] = n_g
+            if panel:
+                t3 = time.time()
+                elo, detail = gauge(net, dev, args.sims, args.m,
+                                    games=args.gauge_games, seed=it, panel=panel)
+                rec["elo"] = round(elo)
+                rec["elo_vs"] = {name: round(sc, 3) for name, _, sc, _ in detail}
+                rec["t_gauge"] = round(time.time() - t3, 1)
             rec["t_eval"] = round(time.time() - t2, 1)
         # save on even iterations (4, 6, 8, ...) so the Elo ladder gets evenly spaced rungs
         if args.ckpt_every and it % args.ckpt_every == 0:

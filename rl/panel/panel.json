@@ -1,0 +1,10 @@
+{
+  "anchor": "random = 0 Elo",
+  "source": "ladder.py round-robin on run r3, 30 games per colour per pair",
+  "references": [
+    {"kind": "script", "name": "greedy", "elo": 216},
+    {"kind": "net", "name": "iter04", "path": "panel/ref_iter04.pt", "elo": 541},
+    {"kind": "net", "name": "iter08", "path": "panel/ref_iter08.pt", "elo": 691},
+    {"kind": "net", "name": "iter14", "path": "panel/ref_iter14.pt", "elo": 819}
+  ]
+}
