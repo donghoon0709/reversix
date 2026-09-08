@@ -3,7 +3,7 @@
 //
 // One action = one placement. A turn is two placements by the SAME player, so a value
 // is negated on backup only when the player actually changes.
-import { reduceGame, requiredPlacements, BLACK, WHITE } from './rules.js'
+import { reduceGame, turnComplete } from './rules.js'
 import { viewOf, safePlacements, encode } from './ai.js'
 
 const C_VISIT = 50, C_SCALE = 1
@@ -36,9 +36,7 @@ function halvingSchedule(nSim, m) {
 /** A game position that advances one placement at a time, auto-resolving turns. */
 function stepGame(state, cell) {
   let s = reduceGame(state, { type: 'PLACE', cell })
-  if (s.provisional.placements.length === requiredPlacements(s.turnStart)) {
-    s = reduceGame(s, { type: 'COMMIT_TURN' })
-  }
+  if (turnComplete(s)) s = reduceGame(s, { type: 'COMMIT_TURN' })
   return s
 }
 const terminalValue = (state, player) => {

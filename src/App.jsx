@@ -2,7 +2,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import Board from './components/Board.jsx'
 import RulesDialog from './components/RulesDialog.jsx'
 import ModeDialog, { MODES } from './components/ModeDialog.jsx'
-import { createInitialGame, reduceGame, requiredPlacements, BLACK, WHITE, BOARD_SIZE } from './game/rules.js'
+import { createInitialGame, reduceGame, placementsNeeded, turnComplete, BLACK, WHITE, BOARD_SIZE } from './game/rules.js'
 import { viewOf, greedyTurn } from './game/ai.js'
 import { searchPlacement } from './game/search.js'
 import { ReversixNet } from './game/nn.js'
@@ -64,7 +64,7 @@ export default function App() {
     busy.current = true
     let cancelled = false
     const placed = state.provisional.placements.length
-    const need = requiredPlacements(state.turnStart)
+    const need = placementsNeeded(state)
     setThinking(true)
     setProgress(null)
 
@@ -104,7 +104,7 @@ export default function App() {
     ? { who: state.recentEffects[0].player, cells: state.recentEffects.map(e => e.cell).filter(c => c != null) }
     : null
   const modeLabel = MODES.find(m => m.id === mode)?.label ?? '2인 대전'
-  const need = requiredPlacements(state.turnStart)
+  const need = placementsNeeded(state)
 
   return (
     <div className="app-shell">
@@ -129,7 +129,7 @@ export default function App() {
         <Board state={state} dispatch={dispatch} locked={computerToMove || thinking}/>
         <div className="control-group">
           <button className="control" disabled={state.provisional.placements.length === 0 || !!state.terminal || computerToMove} onClick={() => dispatch({ type: 'RESET_TURN' })}>턴 초기화</button>
-          <button className="control primary" disabled={state.provisional.placements.length !== need || !!state.terminal || computerToMove} onClick={() => dispatch({ type: 'COMMIT_TURN' })}>턴 확정</button>
+          <button className="control primary" disabled={!turnComplete(state) || !!state.terminal || computerToMove} onClick={() => dispatch({ type: 'COMMIT_TURN' })}>턴 확정</button>
         </div>
         <p>최근 효과: {recentSummary}</p>
       </main>

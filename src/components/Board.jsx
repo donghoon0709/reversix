@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { BOARD_SIZE, BLACK, WHITE, findWinningLines, placeableFor, requiredPlacements } from '../game/rules.js'
+import { BOARD_SIZE, BLACK, WHITE, getSixLines, getLegalPlacements, placementsNeeded } from '../game/rules.js'
 
 function coordinate(cell) {
   return `${String.fromCharCode(65 + (cell % BOARD_SIZE))}${Math.floor(cell / BOARD_SIZE) + 1}`
@@ -25,13 +25,13 @@ export default function Board({ state, dispatch, locked = false }) {
   const lineOwner = state.checkedPlayer
     ? (state.checkedPlayer === BLACK ? WHITE : BLACK)
     : state.activePlayer
-  const winning = new Set(findWinningLines(state.provisional.board, lineOwner).flat())
-  const quotaReached = state.provisional.placements.length >= requiredPlacements(state.turnStart)
+  const winning = new Set(getSixLines(state.provisional.board, lineOwner).flat())
+  const quotaReached = state.provisional.placements.length >= placementsNeeded(state)
   const latestProvisional = state.provisional.placements.at(-1)
   const legal = new Set(
     state.terminal || quotaReached || locked
       ? []
-      : placeableFor(state),
+      : getLegalPlacements(state.provisional.board, state.activePlayer),
   )
 
   useEffect(() => {

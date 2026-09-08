@@ -1,13 +1,13 @@
 // Computer opponents. The encoding here must match the training environment
 // (rl/rxenv.c rx_encode) exactly, or the network sees a different game.
 import {
-  BOARD_SIZE, BOARD_CELLS, WIN_LENGTH, BLACK, WHITE,
-  applyPlacement, findWinningLines, requiredPlacements, getPlaceableCells,
+  BOARD_SIZE, BOARD_CELLS, SIX, BLACK, WHITE,
+  applyPlacement, getSixLines, placementsNeeded, getLegalPlacements,
 } from './rules.js'
 
 const N = BOARD_SIZE
 const other = p => (p === BLACK ? WHITE : BLACK)
-const hasLine = (board, p) => findWinningLines(board, p).length > 0
+const hasLine = (board, p) => getSixLines(board, p).length > 0
 
 /** What the agent needs to know about the position, pulled out of the reducer state. */
 export function viewOf(state) {
@@ -17,7 +17,7 @@ export function viewOf(state) {
     checked: state.checkedPlayer === state.activePlayer,
     placed: state.provisional.placements.length,
     first: state.provisional.placements[0] ?? -1,
-    need: requiredPlacements(state.turnStart),
+    need: placementsNeeded(state),
   }
 }
 
@@ -73,7 +73,7 @@ export function encode(v) {
     x[P(8) + i] = 1
   }
   if (v.checked) x.fill(1, P(2), P(3))
-  for (const line of findWinningLines(board, opp)) for (const c of line) x[P(3) + c] = 1
+  for (const line of getSixLines(board, opp)) for (const c of line) x[P(3) + c] = 1
   if (placed) x.fill(1, P(4), P(5))
   if (first >= 0) x[P(5) + first] = 1
   if (need === 2) x.fill(1, P(6), P(7))
@@ -92,9 +92,9 @@ function evalBoard(board, p) {
   for (const [dr, dc] of AXES) {
     for (let r = 0; r < N; r++) {
       for (let c = 0; c < N; c++) {
-        if (!inside(r + dr * (WIN_LENGTH - 1), c + dc * (WIN_LENGTH - 1))) continue
+        if (!inside(r + dr * (SIX - 1), c + dc * (SIX - 1))) continue
         let mine = 0, they = 0
-        for (let i = 0; i < WIN_LENGTH; i++) {
+        for (let i = 0; i < SIX; i++) {
           const v = board[(r + dr * i) * N + (c + dc * i)]
           if (v === p) mine++
           else if (v === opp) they++

@@ -20,8 +20,8 @@ test.describe('Reversix public UI', () => {
 
   test('fills cells with stones and centers contrasting placement numbers', async ({ page }) => {
     await page.goto('/')
-    const black = page.getByRole('gridcell', { name: /E5 검은 돌/ })
-    const white = page.getByRole('gridcell', { name: /F5 흰 돌/ })
+    const black = page.getByRole('gridcell', { name: /E5 흰 돌/ })
+    const white = page.getByRole('gridcell', { name: /F5 검은 돌/ })
     for (const stone of [black, white]) {
       expect(await stone.evaluate(element => {
         const style = getComputedStyle(element, '::after')
@@ -29,7 +29,7 @@ test.describe('Reversix public UI', () => {
       })).toBe(true)
     }
 
-    await page.getByRole('gridcell', { name: /F4 빈 칸/ }).click()
+    await page.getByRole('gridcell', { name: /E4 빈 칸/ }).click()
     const blackNumber = page.locator('.is-provisional small')
     await expect(blackNumber).toHaveText('1')
     await expect(blackNumber).toHaveCSS('color', 'rgb(255, 255, 255)')
@@ -42,7 +42,7 @@ test.describe('Reversix public UI', () => {
 
   test('places legal black stones, resets, and commits a turn', async ({ page }) => {
     await page.goto('/')
-    const cell = page.getByRole('gridcell', { name: /F4 빈 칸/ })
+    const cell = page.getByRole('gridcell', { name: /E4 빈 칸/ })
     await cell.click()
     await expect(page.getByText('현재 배치:')).toContainText('1')
     await expect(page.getByRole('button', { name: '턴 확정' })).toBeEnabled()
@@ -57,7 +57,7 @@ test.describe('Reversix public UI', () => {
 
   test('cancels only the latest provisional stone', async ({ page }) => {
     await page.goto('/')
-    await page.getByRole('gridcell', { name: /F4 빈 칸/ }).click()
+    await page.getByRole('gridcell', { name: /E4 빈 칸/ }).click()
     await page.getByRole('button', { name: '턴 확정' }).click()
     await page.locator('.is-legal').first().click()
     await page.locator('.is-legal').first().click()
@@ -75,8 +75,8 @@ test.describe('Reversix public UI', () => {
 
   test('animates provisional flips between the original and new colors', async ({ page }) => {
     await page.goto('/')
-    await page.getByRole('gridcell', { name: /F4 빈 칸/ }).click()
-    const blackFlip = page.getByRole('gridcell', { name: /F5 검은 돌/ })
+    await page.getByRole('gridcell', { name: /E4 빈 칸/ }).click()
+    const blackFlip = page.getByRole('gridcell', { name: /E5 검은 돌/ })
     await expect(blackFlip).toHaveClass(/is-flipping-to-black/)
     expect(await blackFlip.evaluate(element => {
       const style = getComputedStyle(element, '::after')
@@ -99,7 +99,7 @@ test.describe('Reversix public UI', () => {
 
   test('keeps all provisional flip animations in the same phase', async ({ page }) => {
     await page.goto('/')
-    await page.getByRole('gridcell', { name: /F4 빈 칸/ }).click()
+    await page.getByRole('gridcell', { name: /E4 빈 칸/ }).click()
     await page.getByRole('button', { name: '턴 확정' }).click()
     await page.locator('.is-legal').first().click()
     await page.locator('.is-legal').first().click()
@@ -130,7 +130,7 @@ test.describe('Reversix public UI', () => {
 
   test('confirms a destructive new game with Cancel focused first', async ({ page }) => {
     await page.goto('/')
-    await page.getByRole('gridcell', { name: /F4 빈 칸/ }).click()
+    await page.getByRole('gridcell', { name: /E4 빈 칸/ }).click()
     await page.getByRole('button', { name: '새 게임' }).click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
@@ -155,19 +155,19 @@ test.describe('Reversix public UI', () => {
     await page.keyboard.press('Enter')
     await expect(cells.nth(10)).toBeFocused()
     await expect(page.getByText('현재 배치:')).toContainText('0')
-    await cells.nth(35).focus()
+    await cells.nth(34).focus()
     await page.keyboard.press('Space')
-    await expect(cells.nth(35)).toBeFocused()
+    await expect(cells.nth(34)).toBeFocused()
     await expect(page.getByText('현재 배치:')).toContainText('1')
     await page.getByRole('button', { name: '턴 초기화' }).click()
     await expect(page.getByText('현재 배치:')).toContainText('0')
-    await cells.nth(35).focus()
-    await expect(cells.nth(35)).toBeFocused()
+    await cells.nth(34).focus()
+    await expect(cells.nth(34)).toBeFocused()
   })
 
   test('marks and accepts only legal placements', async ({ page }) => {
     await page.goto('/')
-    const legal = page.getByRole('gridcell', { name: /F4 빈 칸/ })
+    const legal = page.getByRole('gridcell', { name: /E4 빈 칸/ })
     const illegal = page.getByRole('gridcell', { name: /A1 빈 칸/ })
     await expect(page.locator('.is-legal')).toHaveCount(4)
     await expect(legal).toHaveClass(/is-legal/)
@@ -228,7 +228,7 @@ test.describe('Reversix public UI', () => {
     await page.getByRole('button', { name: '새 게임' }).click()
     await page.getByRole('button', { name: /휴리스틱/ }).click()
     await expect(page.getByText('모드:')).toContainText('휴리스틱')
-    await page.getByRole('gridcell', { name: /F4 빈 칸/ }).click()
+    await page.getByRole('gridcell', { name: /E4 빈 칸/ }).click()
     await page.getByRole('button', { name: '턴 확정' }).click()
     // white is the computer: it should take its two stones and hand the turn back
     await expect(page.getByText('현재 플레이어:')).toContainText('검은색', { timeout: 15000 })
@@ -242,7 +242,7 @@ test.describe('Reversix public UI', () => {
     await page.getByRole('button', { name: '새 게임' }).click()
     await page.getByRole('button', { name: /학습 에이전트/ }).click()
     await expect(page.getByText('모드:')).toContainText('학습 에이전트', { timeout: 20000 })
-    await page.getByRole('gridcell', { name: /F4 빈 칸/ }).click()
+    await page.getByRole('gridcell', { name: /E4 빈 칸/ }).click()
     await page.getByRole('button', { name: '턴 확정' }).click()
     await expect(page.getByText('현재 플레이어:')).toContainText('검은색', { timeout: 120000 })
     await expect(page.getByText('최근 효과:')).toContainText('흰')
@@ -253,7 +253,7 @@ test.describe('Reversix public UI', () => {
     await page.getByRole('button', { name: '새 게임' }).click()
     await page.getByRole('button', { name: /학습 에이전트/ }).click()
     await expect(page.getByText('모드:')).toContainText('학습 에이전트', { timeout: 20000 })
-    await page.getByRole('gridcell', { name: /F4 빈 칸/ }).click()
+    await page.getByRole('gridcell', { name: /E4 빈 칸/ }).click()
     await page.getByRole('button', { name: '턴 확정' }).click()
     // the search reports progress while it runs
     await expect(page.locator('.thinking')).toContainText('/', { timeout: 30000 })
@@ -266,7 +266,7 @@ test.describe('Reversix public UI', () => {
     await page.goto('/')
     await page.getByRole('button', { name: '새 게임' }).click()
     await page.getByRole('button', { name: /휴리스틱/ }).click()
-    await page.getByRole('gridcell', { name: /F4 빈 칸/ }).click()
+    await page.getByRole('gridcell', { name: /E4 빈 칸/ }).click()
     await page.getByRole('button', { name: '턴 확정' }).click()
     await expect(page.getByText('현재 플레이어:')).toContainText('검은색', { timeout: 20000 })
     // the computer places two stones, and only those carry the last-move marker
@@ -282,7 +282,7 @@ test.describe('Reversix public UI', () => {
     await page.goto('/')
     await page.getByRole('button', { name: '새 게임' }).click()
     await page.getByRole('button', { name: /휴리스틱/ }).click()
-    await page.getByRole('gridcell', { name: /F4 빈 칸/ }).click()
+    await page.getByRole('gridcell', { name: /E4 빈 칸/ }).click()
     await page.getByRole('button', { name: '턴 확정' }).click()
     await expect(page.getByText('현재 플레이어:')).toContainText('검은색', { timeout: 15000 })
     await expect(page.locator('.is-legal').first()).toBeVisible()   // black may move again
