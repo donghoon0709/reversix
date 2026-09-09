@@ -654,6 +654,26 @@ test.describe('Reversix public UI', () => {
     await expect(page.getByTestId('eval-value')).toContainText(/흑 \d+% : 백 \d+%/)
   })
 
+  test('drops the suggestions once the turn only needs committing', async ({ page }) => {
+    await startTwoPlayerPractice(page)
+    await expect(page.getByTestId('eval-bar')).toBeVisible({ timeout: 60000 })
+    await expect(page.locator('.is-hint-1')).toHaveCount(1)
+
+    // Black's opening turn is a single stone, so one placement already fills the quota and
+    // the only move left is 턴 확정 — there is nothing to suggest.
+    await page.getByRole('gridcell', { name: /E4 빈 칸/ }).click()
+    await expect(page.getByRole('button', { name: '턴 확정' })).toBeEnabled()
+    // wait out the recompute, so the empty board is the real reading and not just a stale one
+    await expect(page.getByTestId('eval-value')).not.toContainText('재계산 중')
+    await expect(page.locator('.is-hint')).toHaveCount(0)
+    await expect(page.getByTestId('eval-hints')).toContainText('추천 착수 없음')
+
+    // committing hands the turn over, and White's own suggestions come back
+    await page.getByRole('button', { name: '턴 확정' }).click()
+    await expect(page.locator('.is-hint-1')).toHaveCount(1)
+    await expect(page.getByTestId('eval-hints')).toContainText('추천 —')
+  })
+
   test('always analyses in review mode regardless of the practice toggle', async ({ page }) => {
     await startReview(page)
     await expect(page.getByTestId('eval-bar')).toBeVisible({ timeout: 60000 })

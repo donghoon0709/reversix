@@ -19,7 +19,17 @@ const STONE_GAP_MS = 500        // pause between the two stones of one turn
 const COMPUTER_MODE_IDS = MODES.map(m => m.id).filter(id => id !== 'human' && id !== 'review')
 const sleep = ms => new Promise(r => window.setTimeout(r, ms))
 const label = p => (p === BLACK ? '흑' : '백')
-const NO_HINTS = new Map()          // stable identity so Board does not see a new Map every render
+const NO_HINTS = new Map()          // stable identities so Board and EvalBar do not see fresh
+const NO_MOVES = []                 // collections on every render
+
+// A turn with all its stones already down waits on 턴 확정, and the network never sees such
+// a position: training commits a turn the moment it is complete (see stepGame in
+// src/game/search.js). Analysing it as-is asks for placements the player cannot make and
+// reads a value off a state the value head was never trained on, so analyse the committed
+// continuation instead. Its moves belong to the opponent, so the caller drops the hints.
+const awaitingCommit = state => !state.terminal
+  && state.provisional.placements.length >= placementsNeeded(state)
+const positionToAnalyse = state => (awaitingCommit(state) ? reduceGame(state, { type: 'COMMIT_TURN' }) : state)
 
 const countStones = board => board.reduce(
   (a, v) => (v === BLACK ? { ...a, black: a.black + 1 } : v === WHITE ? { ...a, white: a.white + 1 } : a),
@@ -223,7 +233,11 @@ export default function App() {
     let cancelled = false
     const timer = window.setTimeout(() => {
       if (cancelled) return
-      setAnalysis({ ...analyzePosition(netRef.current, view), for: view })
+      setAnalysis({
+        ...analyzePosition(netRef.current, positionToAnalyse(view)),
+        for: view,
+        opponentToMove: awaitingCommit(view),
+      })
     }, 0)
     return () => { cancelled = true; window.clearTimeout(timer) }
   }, [analysisOn, thinking, view, netReady])
@@ -232,11 +246,19 @@ export default function App() {
   const occupied = view.provisional.board.filter(v => v != null).length
   // A stale reading points at cells that may now be occupied, so hints only ever come
   // from a reading that matches what is on screen; review always shows them, otherwise
-  // only on the human's own turn.
-  const hints = useMemo(() => {
-    if (!fresh || !analysis || analysis.terminal || (!reviewing && computerToMove)) return NO_HINTS
-    return new Map(analysis.moves.slice(0, 3).map((m, i) => [m.cell, { rank: i + 1, prob: m.prob }]))
+  // only on the human's own turn. A turn waiting on 턴 확정 has no move left to suggest:
+  // its reading belongs to the position after the commit, so those moves are the
+  // opponent's and must not be drawn as suggestions.
+  const suggestions = useMemo(() => {
+    if (!fresh || !analysis || analysis.terminal || analysis.opponentToMove) return NO_MOVES
+    if (!reviewing && computerToMove) return NO_MOVES
+    return analysis.moves.slice(0, 3)
   }, [fresh, analysis, reviewing, computerToMove])
+  // the board and the panel's list are the same suggestions, so they can never disagree
+  const hints = useMemo(
+    () => (suggestions.length ? new Map(suggestions.map((m, i) => [m.cell, { rank: i + 1, prob: m.prob }])) : NO_HINTS),
+    [suggestions],
+  )
 
   const recentSummary = view.recentEffects?.length
     ? view.recentEffects.map(e => `${e.player === BLACK ? '흑' : '백'} ${e.cell != null ? coord(e.cell) : ''} 착수 · ${e.flips?.length ?? 0}개 뒤집힘`).join(', ')
@@ -345,7 +367,7 @@ export default function App() {
         {linkError && <p className="stuck-notice">공유 링크를 열지 못했습니다: {linkError}</p>}
         {!reviewing && statusSection}
         {analysisOn && analysis && (
-          <EvalBar blackWin={analysis.blackWin} occupied={occupied} moves={analysis.moves} stale={!fresh}/>
+          <EvalBar blackWin={analysis.blackWin} occupied={occupied} moves={suggestions} stale={!fresh}/>
         )}
         <Board state={view} dispatch={dispatch} locked={computerToMove || thinking} review={reviewing} onStep={handleReviewStep} hints={hints}/>
         {reviewing ? (
