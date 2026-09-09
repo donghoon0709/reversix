@@ -656,6 +656,10 @@ button.control:disabled {
   color: #b45309;
 }
 
+.eval-caveat-hidden {
+  visibility: hidden;
+}
+
 .eval-hints {
   margin: 0;
   font-size: 0.85rem;

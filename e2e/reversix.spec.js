@@ -672,4 +672,50 @@ test.describe('Reversix public UI', () => {
     await expect(page.locator('.is-hint.is-black')).toHaveCount(0)
     await expect(page.locator('.is-hint.is-white')).toHaveCount(0)
   })
+
+  test('keeps the 다음 button at a fixed height while stepping through a longer record', async ({ page }) => {
+    test.setTimeout(120000)
+    // startReview's own record is only 4 snapshots long (Black's opening, White's reply) —
+    // every position after the first shows the same 직전 수 line and nothing else in the
+    // status section ever changes, so stepping through it would never actually exercise the
+    // bug. This prefix of the move list from the "doomed first stone" test above is verified
+    // (via a standalone replay of src/game/record.js) to reach a position with a 체크 line
+    // that the earlier positions don't have, AND to cross EvalBar's 24-stone low-confidence
+    // threshold partway through — two independent reasons for the status section, and so the
+    // eval panel and the space above the board, to change height mid-record.
+    const moves = [56, 66, 53, 52, 43, 33, 62, 34, 77, 57, 23, 63, 58, 72, 35, 12, 74, 65, 42, 22, 81]
+    const cells = page.locator('button[role="gridcell"]')
+    await startTwoPlayer(page)
+    for (const m of moves) {
+      await cells.nth(m).click()
+      const placed = await page.getByText('현재 배치:').innerText()
+      const need = await page.getByText('필요한 배치:').innerText()
+      if (placed.match(/현재 배치: (\d+)/)[1] === need.match(/필요한 배치: (\d+)/)[1]) {
+        await page.getByRole('button', { name: '턴 확정' }).click()
+      }
+    }
+    // confirms the record really does gain a 체크 line, not just that it plays out
+    await expect(page.getByText('체크:')).toBeVisible()
+
+    const link = await page.getByRole('textbox', { name: '공유 링크' }).inputValue()
+    await page.goto(link)
+    await expect(page.getByText('모드:')).toContainText('기보 감상')
+
+    // review always analyses; let the eval panel finish appearing before the first reading,
+    // or its arrival mid-loop would itself shift the buttons and produce a false failure
+    await expect(page.getByTestId('eval-bar')).toBeVisible({ timeout: 60000 })
+
+    await page.getByRole('button', { name: '처음' }).click()
+    const [, , total] = (await page.locator('.review-position').innerText()).match(/(\d+) \/ (\d+)/)
+    expect(Number(total)).toBeGreaterThan(4)   // longer than startReview's record, as intended
+
+    const nextButton = page.getByRole('button', { name: '다음' })
+    const firstY = (await nextButton.boundingBox()).y
+    for (let i = 1; i < Number(total); i++) {
+      await nextButton.click()
+      await expect(page.locator('.review-position')).toContainText(`${i + 1} / ${total}`)
+      const box = await nextButton.boundingBox()
+      expect(box.y).toBe(firstY)
+    }
+  })
 })

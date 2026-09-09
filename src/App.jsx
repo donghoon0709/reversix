@@ -292,6 +292,32 @@ export default function App() {
     })
   }, [])
 
+  // In review mode this renders below ReviewControls instead of above the board (see the
+  // <main> JSX below): its line count varies from position to position — 직전 수, pass
+  // notices, 체크, announcements and 게임 종료 all come and go — and above the board that
+  // shift carries the 처음/이전/다음/마지막 buttons along with it, sliding them out from under
+  // the pointer while stepping. Below ReviewControls the same shifting is harmless.
+  const statusSection = (
+    <section aria-live="polite">
+      <p>모드: <strong>{modeLabel}</strong>{mode !== 'human' && mode !== 'review' && <> · 나는 {label(humanSide)}, 컴퓨터는 {label(computerSide)}</>}</p>
+      <p>현재 플레이어: <strong>{label(view.activePlayer)}</strong>{thinking && <span className="thinking"> · 생각 중{progress ? ` ${progress[0]}/${progress[1]}` : ''}…</span>}</p>
+      <p>필요한 배치: {need} / 현재 배치: {view.provisional.placements.length}</p>
+      {lastMove && <p className="last-move-line">직전 수 — <strong>{label(lastMove.who)}</strong> {lastMove.cells.map(coord).join(' → ')}</p>}
+      {passes.map((t, i) => <p key={i} className="pass-notice">{t}</p>)}
+      {!reviewing && stuck && <p className="stuck-notice">둘 수 있는 곳이 없습니다.</p>}
+      {!reviewing && deadEnd && <p className="stuck-notice">이 수를 두면 둘째 수를 둘 곳이 없습니다. 턴을 초기화하고 다른 곳에 두세요.</p>}
+      {view.checkedPlayer && <p>체크: {label(view.checkedPlayer)}</p>}
+      {netStatus && <p>{netStatus}</p>}
+      {view.announcement && <p>{view.announcement}</p>}
+      {view.terminal && <p>게임 종료: {outcomeText(view)}</p>}
+      {reviewing && review.rep.error && (
+        <p className="stuck-notice">
+          기보가 {review.rep.error.index + 1}번째 수({coord(review.rep.error.cell)})에서 깨졌습니다: {review.rep.error.reason} — 그 앞까지는 넘겨볼 수 있습니다.
+        </p>
+      )}
+    </section>
+  )
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -317,24 +343,7 @@ export default function App() {
       </header>
       <main className="app-main">
         {linkError && <p className="stuck-notice">공유 링크를 열지 못했습니다: {linkError}</p>}
-        <section aria-live="polite">
-          <p>모드: <strong>{modeLabel}</strong>{mode !== 'human' && mode !== 'review' && <> · 나는 {label(humanSide)}, 컴퓨터는 {label(computerSide)}</>}</p>
-          <p>현재 플레이어: <strong>{label(view.activePlayer)}</strong>{thinking && <span className="thinking"> · 생각 중{progress ? ` ${progress[0]}/${progress[1]}` : ''}…</span>}</p>
-          <p>필요한 배치: {need} / 현재 배치: {view.provisional.placements.length}</p>
-          {lastMove && <p className="last-move-line">직전 수 — <strong>{label(lastMove.who)}</strong> {lastMove.cells.map(coord).join(' → ')}</p>}
-          {passes.map((t, i) => <p key={i} className="pass-notice">{t}</p>)}
-          {!reviewing && stuck && <p className="stuck-notice">둘 수 있는 곳이 없습니다.</p>}
-          {!reviewing && deadEnd && <p className="stuck-notice">이 수를 두면 둘째 수를 둘 곳이 없습니다. 턴을 초기화하고 다른 곳에 두세요.</p>}
-          {view.checkedPlayer && <p>체크: {label(view.checkedPlayer)}</p>}
-          {netStatus && <p>{netStatus}</p>}
-          {view.announcement && <p>{view.announcement}</p>}
-          {view.terminal && <p>게임 종료: {outcomeText(view)}</p>}
-          {reviewing && review.rep.error && (
-            <p className="stuck-notice">
-              기보가 {review.rep.error.index + 1}번째 수({coord(review.rep.error.cell)})에서 깨졌습니다: {review.rep.error.reason} — 그 앞까지는 넘겨볼 수 있습니다.
-            </p>
-          )}
-        </section>
+        {!reviewing && statusSection}
         {analysisOn && analysis && (
           <EvalBar blackWin={analysis.blackWin} occupied={occupied} moves={analysis.moves} stale={!fresh}/>
         )}
@@ -352,6 +361,7 @@ export default function App() {
             <button className="control primary" disabled={!turnComplete(state) || !!state.terminal || computerToMove} onClick={() => dispatch({ type: 'COMMIT_TURN' })}>{commitLabel}</button>
           </div>
         )}
+        {reviewing && statusSection}
         <p>최근 효과: {recentSummary}</p>
       </main>
       <RulesDialog open={rulesOpen} onClose={closeRules}/>
