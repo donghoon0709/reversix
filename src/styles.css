@@ -507,3 +507,21 @@ button.control:disabled {
   font-weight: 600;
   color: #b45309;
 }
+
+/* Review mode has no focusable cells, so the whole board is one tab stop; give it
+   its own visible focus ring since it is not a <button> and needs a rounded outline
+   that reads clearly against the scrollable wrapper. */
+.board-wrapper[tabindex]:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 3px;
+  border-radius: 0.5rem;
+}
+
+.review-controls {
+  margin-top: 0.75rem;
+}
+
+.review-position {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
