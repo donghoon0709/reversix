@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import Board from './components/Board.jsx'
 import RulesDialog from './components/RulesDialog.jsx'
 import ModeDialog, { MODES } from './components/ModeDialog.jsx'
 import ReviewControls from './components/ReviewControls.jsx'
+import EvalBar from './components/EvalBar.jsx'
 import { createInitialGame, reduceGame, placementsNeeded, turnComplete, canCompleteTurn, BLACK, WHITE, BOARD_SIZE } from './game/rules.js'
 import { searchPlacement } from './game/search.js'
 import { ReversixNet } from './game/nn.js'
+import { analyzePosition } from './game/analysis.js'
 import { replay, parseUrl, formatText, formatUrl } from './game/record.js'
 
 const MODEL_URL = '/model/latest'
@@ -17,6 +19,7 @@ const STONE_GAP_MS = 500        // pause between the two stones of one turn
 const COMPUTER_MODE_IDS = MODES.map(m => m.id).filter(id => id !== 'human' && id !== 'review')
 const sleep = ms => new Promise(r => window.setTimeout(r, ms))
 const label = p => (p === BLACK ? '흑' : '백')
+const NO_HINTS = new Map()          // stable identity so Board does not see a new Map every render
 
 const countStones = board => board.reduce(
   (a, v) => (v === BLACK ? { ...a, black: a.black + 1 } : v === WHITE ? { ...a, white: a.white + 1 } : a),
@@ -69,11 +72,18 @@ export default function App() {
   const [copyStatus, setCopyStatus] = useState('')
   const rulesButton = useRef(null), newButton = useRef(null)
   const netRef = useRef(null)
+  const netLoading = useRef(false)    // guards the analysis loader against racing chooseMode's own load
   const busy = useRef(false)
   const [modelMissing, setModelMissing] = useState(false)
+  const [practice, setPractice] = useState(false)
+  const [netReady, setNetReady] = useState(false)   // netRef is a ref, so this is what triggers a re-render once it loads
+  const [analysis, setAnalysis] = useState(null)
 
   const reviewing = review != null
   const view = reviewing ? review.rep.states[review.index] : state
+  // Practice hints and the eval bar need the same AZ-32 weights as the computer opponent;
+  // review always analyses regardless of the practice toggle.
+  const analysisOn = (reviewing || practice) && !modelMissing
 
   useEffect(() => {
     fetch(`${MODEL_URL}.json`, { method: 'HEAD' })
@@ -107,9 +117,10 @@ export default function App() {
   const closeRules = () => { setRulesOpen(false); rulesButton.current?.focus() }
   const openNew = () => { newButton.current = document.activeElement; setModeOpen(true) }
 
-  const chooseMode = useCallback(async (id, side, cells) => {
+  const chooseMode = useCallback(async (id, side, cells, practiceOn) => {
     setModeOpen(false)
     if (id === 'review') {
+      // review analyses regardless of the toggle, so the practice flag is left alone here
       const rep = replay(cells)
       setReview({ cells, rep, index: rep.states.length - 1 })
       setMode('review')
@@ -117,16 +128,21 @@ export default function App() {
       return
     }
     setReview(null)
+    setPractice(practiceOn)
     if (id === 'net' && !netRef.current) {
       setNetStatus('신경망 불러오는 중…')
+      netLoading.current = true
       try {
         netRef.current = await ReversixNet.load(MODEL_URL)
+        setNetReady(true)          // a ref alone does not re-render
         setNetStatus('')
       } catch (err) {
         setNetStatus(`신경망을 불러오지 못했습니다: ${err.message}`)
         setMode('human'); dispatch({ type: 'NEW_GAME' }); newButton.current?.focus()
+        netLoading.current = false
         return
       }
+      netLoading.current = false
     }
     setMode(id)
     setHumanSide(side === 'white' ? WHITE : BLACK)
@@ -179,6 +195,48 @@ export default function App() {
     })
     return () => { cancelled = true; busy.current = false; setThinking(false); setProgress(null) }
   }, [computerToMove, state, mode])
+
+  // Practice hints and the eval bar need the same weights as the AZ-32 opponent. This
+  // loads them independently of chooseMode's own load, guarded so the two never race.
+  useEffect(() => {
+    if (!analysisOn || netRef.current || netLoading.current) return
+    let cancelled = false
+    netLoading.current = true
+    setNetStatus('신경망 불러오는 중…')
+    ReversixNet.load(MODEL_URL).then(net => {
+      if (cancelled) return
+      netRef.current = net
+      setNetReady(true)
+      setNetStatus('')
+    }).catch(err => {
+      if (cancelled) return
+      setNetStatus(`신경망을 불러오지 못했습니다: ${err.message}`)
+    }).finally(() => { netLoading.current = false })
+    return () => { cancelled = true }
+  }, [analysisOn])
+
+  // Recompute whenever the displayed position changes. Deferred a tick so the just-placed
+  // stone paints before the ~66ms forward pass blocks the main thread.
+  useEffect(() => {
+    if (!analysisOn) { setAnalysis(null); return }
+    if (thinking || !netRef.current) return   // the search already owns the main thread; keep the last reading up
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      if (cancelled) return
+      setAnalysis({ ...analyzePosition(netRef.current, view), for: view })
+    }, 0)
+    return () => { cancelled = true; window.clearTimeout(timer) }
+  }, [analysisOn, thinking, view, netReady])
+
+  const fresh = analysis?.for === view
+  const occupied = view.provisional.board.filter(v => v != null).length
+  // A stale reading points at cells that may now be occupied, so hints only ever come
+  // from a reading that matches what is on screen; review always shows them, otherwise
+  // only on the human's own turn.
+  const hints = useMemo(() => {
+    if (!fresh || !analysis || analysis.terminal || (!reviewing && computerToMove)) return NO_HINTS
+    return new Map(analysis.moves.slice(0, 3).map((m, i) => [m.cell, { rank: i + 1, prob: m.prob }]))
+  }, [fresh, analysis, reviewing, computerToMove])
 
   const recentSummary = view.recentEffects?.length
     ? view.recentEffects.map(e => `${e.player === BLACK ? '흑' : '백'} ${e.cell != null ? coord(e.cell) : ''} 착수 · ${e.flips?.length ?? 0}개 뒤집힘`).join(', ')
@@ -277,7 +335,10 @@ export default function App() {
             </p>
           )}
         </section>
-        <Board state={view} dispatch={dispatch} locked={computerToMove || thinking} review={reviewing} onStep={handleReviewStep}/>
+        {analysisOn && analysis && (
+          <EvalBar blackWin={analysis.blackWin} occupied={occupied} moves={analysis.moves} stale={!fresh}/>
+        )}
+        <Board state={view} dispatch={dispatch} locked={computerToMove || thinking} review={reviewing} onStep={handleReviewStep} hints={hints}/>
         {reviewing ? (
           <ReviewControls
             index={review.index}
@@ -294,7 +355,7 @@ export default function App() {
         <p>최근 효과: {recentSummary}</p>
       </main>
       <RulesDialog open={rulesOpen} onClose={closeRules}/>
-      <ModeDialog unavailable={modelMissing ? { net: '학습된 가중치가 아직 없습니다' } : {}} open={modeOpen} onClose={() => { setModeOpen(false); newButton.current?.focus() }} onStart={chooseMode}/>
+      <ModeDialog unavailable={modelMissing ? { net: '학습된 가중치가 아직 없습니다' } : {}} practiceDisabled={modelMissing} defaultPractice={practice} open={modeOpen} onClose={() => { setModeOpen(false); newButton.current?.focus() }} onStart={chooseMode}/>
     </div>
   )
 }

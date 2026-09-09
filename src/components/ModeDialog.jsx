@@ -64,9 +64,10 @@ export default function ModeDialog({ open, onClose, onStart, unavailable = {}, p
               </button>
             ))}
           </div>
-          <label className="control-group practice-toggle" data-testid="practice-toggle">
+          <label className="control-group practice-toggle">
             <input
               type="checkbox"
+              data-testid="practice-toggle"
               checked={practice}
               disabled={practiceDisabled}
               onChange={e => setPractice(e.target.checked)}
