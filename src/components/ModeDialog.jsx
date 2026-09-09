@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { parseText, parseUrl } from '../game/record.js'
+import { parseRecord } from '../game/record.js'
 
 export const MODES = [
   { id: 'human', label: '2인 대전', hint: '한 기기에서 번갈아 둡니다' },
@@ -11,18 +11,6 @@ export const SIDES = [
   { id: 'black', label: '선공 (흑)', hint: '먼저 두며, 첫 턴은 한 수입니다' },
   { id: 'white', label: '후공 (백)', hint: '컴퓨터가 먼저 둡니다' },
 ]
-
-/** Try the movetext codec first, then fall back to the URL/token codec — this way a
- *  pasted .txt body and a pasted share link (or bare token) both just work.
- *  parseText never throws — for text with no "letter+number" coordinates (a share link,
- *  a stray token) it just comes back with an empty cells array — so an empty result is
- *  what actually triggers the fallback, not a caught exception. parseUrl does throw on
- *  genuinely invalid input, and that's the error the caller sees. */
-function parseRecord(text) {
-  const { cells } = parseText(text)
-  if (cells.length) return cells
-  return parseUrl(text).cells
-}
 
 export default function ModeDialog({ open, onClose, onStart, unavailable = {} }) {
   const ref = useRef(null)
@@ -45,7 +33,7 @@ export default function ModeDialog({ open, onClose, onStart, unavailable = {} })
 
   const loadRecord = text => {
     try {
-      const cells = parseRecord(text)
+      const { cells } = parseRecord(text)
       setLoadError('')
       onStart('review', null, cells)
     } catch (err) {

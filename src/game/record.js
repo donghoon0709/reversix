@@ -192,3 +192,28 @@ export function parseUrl(str) {
   }
   return { cells };
 }
+
+/**
+ * Choose the codec by SHAPE, never by trying one and seeing what falls out.
+ *
+ * This has to be exact because the two formats genuinely overlap: a base64url token is a
+ * bare run of [A-Za-z0-9_-], and about two in five of them contain a coordinate-shaped
+ * substring like "C3". Letting the movetext parser have first refusal therefore turns a
+ * valid share link into a bogus two-move game, silently, most of the time.
+ */
+export function parseRecord(str) {
+  if (typeof str !== 'string' || !str.trim()) throw new Error('Empty game record');
+  const text = str.trim();
+  // a share link names its own payload, so nothing else can claim it
+  if (/[?&]g=/.test(text)) return parseUrl(text);
+  // movetext always carries structure around its coordinates: tags, turn numbers, pass
+  // markers, or simply the whitespace between moves
+  if (/[[\s.]/.test(text) || text.includes('--')) {
+    const parsed = parseText(text);
+    if (!parsed.cells.length) throw new Error('Malformed game record: no moves found');
+    return parsed;
+  }
+  // one bare run of characters: only a whole-string coordinate sequence is movetext
+  if (/^(?:[A-J](?:10|[1-9]))+$/.test(text)) return parseText(text);
+  return parseUrl(text);
+}

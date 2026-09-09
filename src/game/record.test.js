@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createInitialGame, reduceGame, canCompleteTurn, turnComplete, playableFor, BLACK, BOARD_CELLS,
 } from './rules.js';
-import { replay, parseText, parseUrl, formatText, formatUrl } from './record.js';
+import { replay, parseText, parseUrl, parseRecord, formatText, formatUrl } from './record.js';
 
 // Deterministic PRNG (mulberry32) so the corpus below is reproducible.
 function mulberry32(seed) {
@@ -204,5 +204,49 @@ describe('text parsing is liberal', () => {
     expect(meta.human).toBe('BLACK');
     expect(cells).toEqual([toCell('E5'), toCell('D6'), toCell('F4'), toCell('G7')]);
     expect(result).toBe('1-0');
+  });
+});
+
+describe('parseRecord picks the codec by shape', () => {
+  // The formats overlap: a base64url token is a bare run of [A-Za-z0-9_-], and many of
+  // them contain a coordinate-shaped substring. Sniffing by "did the text parser find
+  // anything" therefore mis-reads share links, which is what this guards.
+  const cells = corpus[0].state.history;
+
+  it('reads a share link, a bare token, and movetext back to the same cells', () => {
+    const token = formatUrl(cells);
+    expect(parseRecord(`https://example.com/?g=${token}`).cells).toEqual(cells);
+    expect(parseRecord(token).cells).toEqual(cells);
+    expect(parseRecord(`  ${token}  `).cells).toEqual(cells);
+
+    const text = formatText(replay(cells), { date: '2026-09-09' });
+    expect(parseRecord(text).cells).toEqual(cells);
+  });
+
+  it('never lets the movetext parser claim a token containing a coordinate', () => {
+    // exhaustive over a wide corpus: every token must survive the round trip, including
+    // the ~40% that contain something shaped like "C3"
+    let withCoordinate = 0;
+    const rng = mulberry32(7);
+    for (let i = 0; i < 400; i++) {
+      const length = 2 + Math.floor(rng() * 40);
+      const sample = Array.from({ length }, () => Math.floor(rng() * 100));
+      const token = formatUrl(sample);
+      if (/[A-J](?:10|[1-9])/.test(token)) withCoordinate += 1;
+      expect(parseRecord(token).cells).toEqual(sample);
+    }
+    expect(withCoordinate).toBeGreaterThan(0);
+  });
+
+  it('reads a bare movetext with no tags or turn numbers', () => {
+    // shape detection only, so these need not be legal placements
+    expect(parseRecord('E5 D6 F4').cells).toEqual([44, 53, 35]);
+    expect(parseRecord('E5').cells).toEqual([44]);
+  });
+
+  it('throws on empty and unreadable input', () => {
+    expect(() => parseRecord('')).toThrow();
+    expect(() => parseRecord('   ')).toThrow();
+    expect(() => parseRecord('1. 2. 3.')).toThrow(/no moves found/);
   });
 });
