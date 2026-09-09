@@ -23,6 +23,17 @@ const startVsAgent = async (page, side = /선공/) => {
   await expect(page.getByText('모드:')).toContainText('AZ-32', { timeout: 60000 })
 }
 
+/** Same as startTwoPlayer, but checks the practice toggle before starting — the shortest
+ *  path into a two-player game with the eval bar and move hints turned on. */
+const startTwoPlayerPractice = async page => {
+  await page.goto('/')
+  await page.getByTestId('practice-toggle').check()
+  await page.getByRole('button', { name: '2인 대전' }).click()
+  await expect(page.getByRole('dialog')).toBeHidden()
+  await expect(page.getByText('모드:')).toContainText('2인 대전')
+  await expect(page.getByRole('button', { name: '새 게임' })).toBeFocused()
+}
+
 /** Plays Black's one-stone opening and White's full two-stone turn, saves the result, and
  *  opens the share link — the shortest deterministic path into review mode for tests that
  *  only care about the review UI itself, not about how the game got there. */
@@ -618,5 +629,47 @@ test.describe('Reversix public UI', () => {
     await expect(page.getByRole('dialog')).toBeHidden()
     await expect(page.getByText('모드:')).toContainText('기보 감상')
     await expect(page.locator('.review-position')).toContainText('2 / 2')
+  })
+
+  test('leaves the board plain when practice mode is off', async ({ page }) => {
+    await startTwoPlayer(page)
+    await page.getByRole('gridcell', { name: /E4 빈 칸/ }).click()
+    await page.getByRole('button', { name: '턴 확정' }).click()
+    await expect(page.getByTestId('eval-bar')).toHaveCount(0)
+    await expect(page.locator('.is-hint')).toHaveCount(0)
+  })
+
+  test('shows the eval bar and move hints when practice mode is on, and stays consistent after a move', async ({ page }) => {
+    await startTwoPlayerPractice(page)
+    // the network weights are the same ones the AZ-32 tests wait on, so give the first
+    // load the same generous timeout
+    await expect(page.getByTestId('eval-bar')).toBeVisible({ timeout: 60000 })
+    await expect(page.getByTestId('eval-hints')).toContainText('추천 —')
+    await expect(page.locator('.is-hint-1')).toHaveCount(1)
+    expect(await page.locator('.is-hint').count()).toBeLessThanOrEqual(3)
+
+    await page.getByRole('gridcell', { name: /E4 빈 칸/ }).click()
+    await page.getByRole('button', { name: '턴 확정' }).click()
+    await expect(page.getByTestId('eval-bar')).toBeVisible()
+    await expect(page.getByTestId('eval-value')).toContainText(/흑 \d+% : 백 \d+%/)
+  })
+
+  test('always analyses in review mode regardless of the practice toggle', async ({ page }) => {
+    await startReview(page)
+    await expect(page.getByTestId('eval-bar')).toBeVisible({ timeout: 60000 })
+    await expect(page.getByTestId('eval-hints')).toContainText('추천 —')
+
+    await page.getByRole('button', { name: '처음' }).click()
+    await expect(page.locator('.review-position')).toContainText('1 / 4')
+    await expect(page.getByTestId('eval-bar')).toBeVisible()
+    await expect(page.getByTestId('eval-hints')).toContainText('추천 —')
+  })
+
+  test('only ever marks empty, legal cells as suggestions', async ({ page }) => {
+    await startTwoPlayerPractice(page)
+    await expect(page.getByTestId('eval-bar')).toBeVisible({ timeout: 60000 })
+    await expect(page.locator('.is-hint').first()).toBeVisible()
+    await expect(page.locator('.is-hint.is-black')).toHaveCount(0)
+    await expect(page.locator('.is-hint.is-white')).toHaveCount(0)
   })
 })
