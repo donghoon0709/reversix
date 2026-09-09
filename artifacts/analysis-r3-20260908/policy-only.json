@@ -1,0 +1,22 @@
+[
+  {
+    "iter": 20,
+    "mode": "policy argmax, safe legality mask, no tree search",
+    "score": 0.890625,
+    "as_black": 0.875,
+    "as_white": 0.90625,
+    "games": 256,
+    "seed": 7241,
+    "seconds": 45.0
+  },
+  {
+    "iter": 29,
+    "mode": "policy argmax, safe legality mask, no tree search",
+    "score": 0.5703125,
+    "as_black": 0.265625,
+    "as_white": 0.875,
+    "games": 256,
+    "seed": 7241,
+    "seconds": 29.5
+  }
+]

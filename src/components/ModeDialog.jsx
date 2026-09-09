@@ -2,13 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 
 export const MODES = [
   { id: 'human', label: '2인 대전', hint: '한 기기에서 번갈아 둡니다' },
-  { id: 'greedy', label: '컴퓨터 · 휴리스틱', hint: '창(window) 포텐셜로 한 턴을 통째로 평가합니다' },
-  { id: 'net', label: '컴퓨터 · 학습 에이전트', hint: '자기대국으로 학습한 신경망' },
+  { id: 'net', label: 'AZ-32', hint: '자기대국으로 학습한 신경망 · 매 수 32회 탐색' },
 ]
 
 export const SIDES = [
-  { id: 'black', label: '선공 (검은색)', hint: '먼저 두며, 첫 턴은 한 수입니다' },
-  { id: 'white', label: '후공 (흰색)', hint: '컴퓨터가 먼저 둡니다' },
+  { id: 'black', label: '선공 (흑)', hint: '먼저 두며, 첫 턴은 한 수입니다' },
+  { id: 'white', label: '후공 (백)', hint: '컴퓨터가 먼저 둡니다' },
 ]
 
 export default function ModeDialog({ open, onClose, onStart, unavailable = {} }) {

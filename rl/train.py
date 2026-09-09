@@ -135,8 +135,9 @@ def main():
                     help="games per colour against each Elo reference (0 disables)")
     ap.add_argument("--out", type=str, default="runs/r1")
     ap.add_argument("--resume", type=str, default="")
-    ap.add_argument("--save-buffer", type=int, default=200_000,
-                    help="how many recent samples to persist for a lossless resume (0 = none)")
+    ap.add_argument("--save-buffer", type=int, default=0,
+                    help="recent samples to persist for a lossless resume "
+                         "(0 = the whole buffer, -1 = do not save)")
     args = ap.parse_args()
 
     os.makedirs(args.out, exist_ok=True)
@@ -144,11 +145,30 @@ def main():
     dev = netmod.pick_device()
     net = netmod.Net(planes=rx.PLANES, ch=args.ch, blocks=args.blocks).to(dev)
     start_iter = 0
+    resume_ck = None
     if args.resume and os.path.exists(args.resume):
-        ck = torch.load(args.resume, map_location=dev)
-        net.load_state_dict(ck["net"]); start_iter = ck.get("iter", 0) + 1
+        resume_ck = torch.load(args.resume, map_location=dev)
+        net.load_state_dict(resume_ck["net"]); start_iter = resume_ck.get("iter", 0) + 1
         print(f"resumed from {args.resume} @ iter {start_iter}")
     opt = torch.optim.AdamW(net.parameters(), lr=args.lr, weight_decay=1e-4)
+    if resume_ck is not None:
+        # Adam's moment estimates are part of the training state: starting them from
+        # scratch on every resume makes the first steps after a restart behave
+        # differently from an uninterrupted run.
+        if "opt" in resume_ck:
+            opt.load_state_dict(resume_ck["opt"])
+            for g in opt.param_groups:            # honour a learning rate given on the
+                g["lr"] = args.lr                 # command line rather than the saved one
+            print("restored optimiser state")
+        else:
+            print("checkpoint has no optimiser state — Adam restarts from scratch")
+        if "np_rng" in resume_ck:
+            # minibatches are drawn from the global numpy stream; without its state a
+            # resumed run trains on different batches than an uninterrupted one
+            st = resume_ck["np_rng"]
+            np.random.set_state((st[0], np.array(st[1], dtype=np.uint32), st[2], st[3], st[4]))
+            torch.set_rng_state(resume_ck["torch_rng"].cpu().to(torch.uint8))
+            print("restored sampling RNG")
     buf = Replay(args.buffer)
     buf_path = os.path.join(args.out, "buffer.npz")
     if args.resume and os.path.exists(buf_path):
@@ -204,13 +224,16 @@ def main():
             t2 = time.time()
             s_g, b_g, w_g, n_g = evaluate(net, dev, args.eval_games, args.sims, args.m,
                                           seed=it, parallel=args.eval_parallel, opponent="greedy")
-            s_r, _, _, n_r = evaluate(net, dev, max(64, args.eval_games // 4), args.sims, args.m,
-                                      seed=it + 1, parallel=args.eval_parallel, opponent="random")
+            s_r, b_r, w_r, n_r = evaluate(net, dev, args.eval_games, args.sims, args.m,
+                                          seed=it + 1, parallel=args.eval_parallel, opponent="random")
             rec["vs_greedy"] = round(s_g, 3)
             rec["vs_greedy_asB"] = round(b_g, 3)
             rec["vs_greedy_asW"] = round(w_g, 3)
             rec["vs_greedy_ci"] = round(1.96 * (0.25 / n_g) ** 0.5, 3)
             rec["vs_random"] = round(s_r, 3)
+            rec["vs_random_asB"] = round(b_r, 3)
+            rec["vs_random_asW"] = round(w_r, 3)
+            rec["vs_random_ci"] = round(1.96 * (0.25 / n_r) ** 0.5, 3)
             rec["eval_n"] = n_g
             if panel:
                 t3 = time.time()
@@ -220,14 +243,18 @@ def main():
                 rec["elo_vs"] = {name: round(sc, 3) for name, _, sc, _ in detail}
                 rec["t_gauge"] = round(time.time() - t3, 1)
             rec["t_eval"] = round(time.time() - t2, 1)
-        # save on even iterations (4, 6, 8, ...) so the Elo ladder gets evenly spaced rungs
+        # numbered checkpoints, for comparing rungs after the run
         if args.ckpt_every and it % args.ckpt_every == 0:
             torch.save({"net": net.state_dict(), "iter": it, "args": vars(args)},
                        os.path.join(args.out, f"ck_{it:04d}.pt"))
-        torch.save({"net": net.state_dict(), "iter": it, "args": vars(args)},
+        np_state = np.random.get_state()
+        torch.save({"net": net.state_dict(), "opt": opt.state_dict(),
+                    "np_rng": (np_state[0], np_state[1].tolist(), np_state[2], np_state[3], np_state[4]),
+                    "torch_rng": torch.get_rng_state(),
+                    "iter": it, "args": vars(args)},
                    os.path.join(args.out, "latest.pt"))
-        if args.save_buffer:
-            n = min(args.save_buffer, len(buf))
+        if args.save_buffer >= 0:
+            n = len(buf) if args.save_buffer == 0 else min(args.save_buffer, len(buf))
             tmp = buf_path + ".tmp.npz"
             np.savez(tmp, S=buf.S[-n:], P=buf.P[-n:], V=buf.V[-n:])
             os.replace(tmp, buf_path)

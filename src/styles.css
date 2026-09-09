@@ -169,6 +169,28 @@ textarea:focus-visible,
   background: #2563eb;
 }
 
+/* Coordinates live inside the board: letters along the top row, numbers down the left
+   column. They sit above the stone (which is drawn by ::after) and stay legible on it. */
+.coord {
+  position: absolute;
+  z-index: 1;
+  font-size: 0.6rem;
+  font-weight: 600;
+  line-height: 1;
+  color: rgb(23 32 51 / 60%);
+  pointer-events: none;
+}
+
+.coord-file { top: 2px; right: 3px; }
+.coord-rank { bottom: 2px; left: 3px; }
+
+.is-black > .coord { color: rgb(255 255 255 / 65%); }
+.is-white > .coord { color: rgb(23 32 51 / 55%); }
+
+.rule-cell > .coord { font-size: 0.5rem; }
+.rule-cell > .coord-file { top: 1px; right: 2px; }
+.rule-cell > .coord-rank { bottom: 1px; left: 2px; }
+
 .board-cell > small {
   position: relative;
   z-index: 1;
@@ -253,6 +275,13 @@ button.control.primary {
   background: #1d4ed8;
 }
 
+/* 턴 확정 is disabled whenever the turn cannot be finished, so it has to read as dead */
+.control:disabled,
+button.control:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
 @media (max-width: 40rem) {
   .app-header {
     align-items: flex-start;
@@ -306,7 +335,8 @@ button.control.primary {
   place-items: center;
   font-size: 1.5rem;
   line-height: 1;
-  opacity: 0.85;
+  /* the mark sits on both light and dark board squares, so it carries its own halo */
+  text-shadow: 0 0 2px #fff, 0 0 5px #fff, 0 0 8px #fff;
   pointer-events: none;
 }
 
@@ -316,5 +346,164 @@ button.control.primary {
 
 @keyframes ban-fade {
   from { opacity: 0; transform: scale(0.7); }
-  to   { opacity: 0.85; transform: scale(1); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* A fixed frame with only the chapter body scrolling: the paging buttons then sit at the
+   same spot on every page and at every window size, so you can click through without
+   moving the pointer. */
+.rules-dialog {
+  max-width: 30rem;
+  height: min(40rem, calc(100vh - 2rem));
+  overflow: hidden;
+}
+
+/* the layout goes on [open] only: a bare `display: flex` here would beat the UA rule that
+   hides a closed <dialog>, leaving it on screen */
+.rules-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.dialog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.dialog-head h2 { margin: 0 0 0.75rem; }
+
+.dialog-close {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  margin: -0.5rem -0.5rem 0 0;
+  border: 0;
+  border-radius: 0.5rem;
+  padding: 0;
+  font-size: 1.75rem;
+  line-height: 1;
+  color: inherit;
+  background: transparent;
+}
+
+.dialog-close:hover { background: rgb(23 32 51 / 8%); }
+
+.rule-page {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.rule-page h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.rule-page p {
+  margin: 0.5rem 0;
+  line-height: 1.6;
+}
+
+/* Every chapter reserves the same block for its diagram and the same total height, so
+   paging through never shifts the 이전/다음 buttons out from under the pointer. */
+.rule-figure {
+  min-height: 268px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  margin: 0.75rem 0;
+}
+
+.rule-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* boards never wrap: a narrow screen scrolls them sideways rather than restacking,
+   which would change the figure's height and move the paging buttons */
+.rule-boards {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.rule-arrow {
+  font-size: 1.25rem;
+  opacity: 0.55;
+}
+
+.rule-grid {
+  flex: none;
+  display: inline-flex;
+  flex-direction: column;
+  border: 1px solid rgb(23 32 51 / 25%);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.rule-row { display: flex; }
+
+/* same two greens, same parity as the board itself, so a figure reads as a board */
+.rule-cell {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  font-size: 0.8rem;
+  background: #dce8c5;
+}
+
+.rule-cell--dark { background: #769656; }
+
+/* deliberately NOT .is-black/.is-white: those carry a full-size ::after that draws the
+   board stones, and it would escape this small figure and cover the dialog */
+.rule-stone {
+  width: 82%;
+  height: 82%;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 0.65rem;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.rule-stone--black { color: #fff; background: #172033; }
+.rule-stone--white { color: #172033; background: #fff; box-shadow: inset 0 0 0 2px #172033; }
+
+.rule-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: #2563eb;
+}
+
+.rule-figure figcaption {
+  min-height: 2.4em;          /* two lines, so a wrapping caption cannot resize the page */
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  line-height: 1.2;
+  opacity: 0.75;
+}
+
+.rule-count {
+  margin: 0.5rem 0;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+
+.pass-notice,
+.stuck-notice {
+  font-weight: 600;
+  color: #b45309;
 }

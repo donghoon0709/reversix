@@ -79,10 +79,28 @@ export function isForbiddenPlacement(turnStartBoard, board, player, cell) {
   return false;
 }
 
-/** Legal placements minus the forbidden ones — what the player may actually play. */
-export function getPlayablePlacements(turnStartBoard, board, player) {
-  return getLegalPlacements(board, player)
-    .filter(cell => !isForbiddenPlacement(turnStartBoard, board, player, cell));
+/**
+ * Placements the player may actually make.
+ *
+ * The ban is a property of the TURN, not of a single stone: a turn may not end having
+ * handed the opponent a six. So the first of two stones is judged by whether the turn
+ * can still be finished cleanly from there — it is never banned for what it does on its
+ * own, since the second stone may undo it. When no first stone leads to a clean finish
+ * the player has no legal turn at all and passes.
+ */
+export function getPlayablePlacements(turnStartBoard, board, player, completesTurn = true) {
+  const legal = getLegalPlacements(board, player);
+  if (completesTurn) {
+    return legal.filter(cell => !isForbiddenPlacement(turnStartBoard, board, player, cell));
+  }
+  return legal.filter(first => {
+    const a = placementEffect(board, player, first);
+    if (!a.ok) return false;
+    const seconds = getLegalPlacements(a.board, player);
+    // with no legal second the first stone ends the turn, so it is judged directly
+    if (!seconds.length) return !isForbiddenPlacement(turnStartBoard, board, player, first);
+    return seconds.some(sec => !isForbiddenPlacement(turnStartBoard, a.board, player, sec));
+  });
 }
 
 /** Maximal runs of EXACTLY six. An overline of seven or more is not a SIX. */
@@ -111,20 +129,57 @@ const baseNeed = turnNumber => (turnNumber === 0 ? 1 : 2);
 export function placementsNeeded(state) {
   const base = baseNeed(state.turnStart.turnNumber);
   if (base === 2 && state.provisional.placements.length === 1
-      && !playableFor(state).length) return 1;
+      && !getLegalPlacements(state.provisional.board, state.activePlayer).length) return 1;
   return base;
 }
-/** Cells the side to move may play right now, forbidden ones already removed. */
+/** Would a stone played now end the turn? Only then does the ban apply. */
+export function completesTurn(state) {
+  return state.provisional.placements.length + 1 >= baseNeed(state.turnStart.turnNumber);
+}
+/**
+ * Cells the side to move may put a stone on right now.
+ *
+ * The ban judges a whole TURN, so only the stone that ends one is filtered here. The
+ * first of two stones stays open even when every second stone after it turns out to be
+ * banned: the player may try it and watch the follow-ups light up as forbidden, which is
+ * the only way to see WHY a position has no move. Such a turn simply cannot be committed
+ * — see turnComplete — so the set of turns the game accepts is unchanged.
+ */
 export function playableFor(state) {
-  return getPlayablePlacements(state.turnStart.board, state.provisional.board, state.activePlayer);
-}
-export function forbiddenFor(state) {
   const board = state.provisional.board, player = state.activePlayer;
-  return getLegalPlacements(board, player)
-    .filter(cell => isForbiddenPlacement(state.turnStart.board, board, player, cell));
+  const legal = getLegalPlacements(board, player);
+  if (!completesTurn(state)) return legal;
+  return legal.filter(cell => !isForbiddenPlacement(state.turnStart.board, board, player, cell));
 }
+/** Cells that satisfy the Reversi rule — they flip something — but the ban keeps out. */
+export function forbiddenFor(state) {
+  const playable = new Set(playableFor(state));
+  return getLegalPlacements(state.provisional.board, state.activePlayer)
+    .filter(cell => !playable.has(cell));
+}
+
+/** Has the turn so far handed the opponent a six it did not have when the turn began? */
+function turnGivesSix(state) {
+  const opp = opponent(state.activePlayer);
+  const before = sixSignatures(state.turnStart.board, opp);
+  for (const line of getSixLines(state.provisional.board, opp)) {
+    if (!before.has(signature(line))) return true;
+  }
+  return false;
+}
+
+/** Can the turn still be brought to a legal end from where it stands? */
+export function canCompleteTurn(state) {
+  if (state.provisional.placements.length >= placementsNeeded(state)) return !turnGivesSix(state);
+  return getPlayablePlacements(state.turnStart.board, state.provisional.board,
+                               state.activePlayer, completesTurn(state)).length > 0;
+}
+
+/** Whether COMMIT_TURN is a legal action right now. */
 export function turnComplete(state) {
-  return state.provisional.placements.length >= placementsNeeded(state);
+  if (canCompleteTurn(state)) return state.provisional.placements.length >= placementsNeeded(state);
+  // this turn leads nowhere: only an untouched one may be committed, and that is a pass
+  return state.provisional.placements.length === 0;
 }
 
 function countStones(board) {
@@ -147,34 +202,25 @@ function finishTurn(s, events) {
   s.turnNumber += 1;
 }
 
-/** Pass for as long as the player to move has nothing legal. Mutates `s`. */
-function settlePasses(s, events) {
-  // at the start of a turn the current board IS the baseline, so only newly created
-  // opposing sixes are forbidden
-  while (!s.terminal && !getPlayablePlacements(s.board, s.board, s.activePlayer).length) {
-    events.push(`${s.activePlayer} PASS`);
-    s.consecutivePasses += 1;
-    finishTurn(s, events);
-    if (!s.terminal && s.consecutivePasses >= 2 && !s.checkedPlayer) {
-      const { black, white } = countStones(s.board);
-      s.terminal = { winner: black === white ? null : black > white ? BLACK : WHITE, reason: 'PASSES' };
-      events.push('DOUBLE PASS');
-    }
-  }
-}
-
 function resolve(state) {
   const events = [];
+  // committing without a stone is a pass, and has to count towards the double-pass end
+  const passed = state.provisional.placements.length === 0;
   const s = {
     board: state.provisional.board.slice(),
     activePlayer: state.turnStart.activePlayer,
     checkedPlayer: state.turnStart.checkedPlayer,
     turnNumber: state.turnStart.turnNumber,
-    consecutivePasses: 0,
+    consecutivePasses: passed ? (state.consecutivePasses || 0) + 1 : 0,
     terminal: null,
   };
+  if (passed) events.push(`${s.activePlayer} PASS`);
   finishTurn(s, events);
-  settlePasses(s, events);
+  if (passed && !s.terminal && s.consecutivePasses >= 2 && !s.checkedPlayer) {
+    const { black, white } = countStones(s.board);
+    s.terminal = { winner: black === white ? null : black > white ? BLACK : WHITE, reason: 'PASSES' };
+    events.push('DOUBLE PASS');
+  }
   const turnStart = {
     board: s.board.slice(), activePlayer: s.activePlayer,
     checkedPlayer: s.checkedPlayer, turnNumber: s.turnNumber,
@@ -194,7 +240,8 @@ export function reduceGame(state, action) {
 
   if (action.type === 'RESET_TURN') {
     return { ...state, board: state.turnStart.board.slice(),
-      provisional: { placements: [], effects: [], board: state.turnStart.board.slice() }, announcement: '' };
+      provisional: { placements: [], effects: [], board: state.turnStart.board.slice() },
+      announcement: '', events: [] };
   }
 
   if (action.type === 'UNDO_PLACEMENT') {
@@ -207,21 +254,23 @@ export function reduceGame(state, action) {
       if (!a.ok) return state;
       board = a.board; effects.push(a.effect);
     }
-    return { ...state, board, provisional: { placements, effects, board }, announcement: '' };
+    return { ...state, board, provisional: { placements, effects, board }, announcement: '', events: [] };
   }
 
   if (action.type === 'PLACE') {
-    if (turnComplete(state)) return state;
+    // only a full turn refuses another stone; a dead-end turn stays open to be explored
+    if (state.provisional.placements.length >= placementsNeeded(state)) return state;
     const a = placementEffect(state.provisional.board, state.activePlayer, action.cell);
     if (!a.ok) return { ...state, announcement: a.reason };
-    if (isForbiddenPlacement(state.turnStart.board, state.provisional.board, state.activePlayer, action.cell))
+    if (completesTurn(state)
+        && isForbiddenPlacement(state.turnStart.board, state.provisional.board, state.activePlayer, action.cell))
       return { ...state, announcement: 'FORBIDDEN_GIVES_SIX' };
     const provisional = {
       placements: [...state.provisional.placements, action.cell],
       effects: [...state.provisional.effects, a.effect],
       board: a.board,
     };
-    return { ...state, board: a.board, provisional, announcement: '' };
+    return { ...state, board: a.board, provisional, announcement: '', events: [] };
   }
 
   if (action.type === 'COMMIT_TURN') {

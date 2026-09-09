@@ -1,0 +1,24 @@
+[
+  {
+    "iter": 20,
+    "mode": "policy argmax after 7 forced random-safe opening plies",
+    "score": 0.87890625,
+    "as_black": 0.859375,
+    "as_white": 0.8984375,
+    "games": 256,
+    "seed": 7241,
+    "opening_seed_base": 88231,
+    "seconds": 57.6
+  },
+  {
+    "iter": 29,
+    "mode": "policy argmax after 7 forced random-safe opening plies",
+    "score": 0.69921875,
+    "as_black": 0.6640625,
+    "as_white": 0.734375,
+    "games": 256,
+    "seed": 7241,
+    "opening_seed_base": 88231,
+    "seconds": 34.4
+  }
+]

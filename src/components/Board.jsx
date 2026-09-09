@@ -77,7 +77,7 @@ export default function Board({ state, dispatch, locked = false }) {
               const lastNote = moveOrder ? `, 직전 상대 착수 ${moveOrder}번째`
                 : lastFlips.has(cell) ? ', 직전 착수로 뒤집힘' : ''
               const banNote = isForbidden ? ' 금수: 상대에게 SIX를 만들어 줍니다' : ''
-              const label = `${coordinate(cell)} ${value === BLACK ? '검은 돌' : value === WHITE ? '흰 돌' : '빈 칸'}${lastNote}${canUndo ? ' 최신 착수 취소 가능' : !occupied ? canPlace ? ' 현재 턴에 착수 가능' : banNote || ' 현재 턴에 착수 불가' : ''}`
+              const label = `${coordinate(cell)} ${value === BLACK ? '흑돌' : value === WHITE ? '백돌' : '빈 칸'}${lastNote}${canUndo ? ' 최신 착수 취소 가능' : !occupied ? canPlace ? ' 현재 턴에 착수 가능' : banNote || ' 현재 턴에 착수 불가' : ''}`
               return (
                 <button
                   aria-disabled={unavailable || undefined}
@@ -101,6 +101,8 @@ export default function Board({ state, dispatch, locked = false }) {
                   tabIndex={cell === focusCell ? 0 : -1}
                   type="button"
                 >
+                  {row === 0 && <span className="coord coord-file" aria-hidden="true">{String.fromCharCode(65 + column)}</span>}
+                  {column === 0 && <span className="coord coord-rank" aria-hidden="true">{row + 1}</span>}
                   {isForbidden && <span className="ban-mark" aria-hidden="true">🚫</span>}
                   {provisionalIndex >= 0 && <small>{provisionalIndex + 1}</small>}
                   {provisionalIndex < 0 && moveOrder && <small>{moveOrder}</small>}

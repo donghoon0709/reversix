@@ -65,6 +65,9 @@ static int six_count(const int8_t*b,int p){
   return cnt;
 }
 static void apply_move(int8_t*b,int p,int s);
+static int base_need(const RxState*s);
+static int is_forbidden(const RxState*s,int p,int cell);
+static int legal_moves(const int8_t*b,int p,int*out);
 /* signatures of p's six lines, as "first cell + axis", so a replaced six is not mistaken
    for the same one */
 static int six_sigs(const int8_t*b,int p,int*out){
@@ -112,6 +115,20 @@ static void apply_move(int8_t*b,int p,int s){
 }
 /* stones still expected this turn, accounting for the skip */
 static int playable_count(const RxState*s);
+/* Can the turn be finished without handing the opponent a SIX, starting with `first`?
+   The ban belongs to the turn as a whole: a first stone is fine if some second stone
+   still cleans up after it, and when no second exists the first stone ends the turn. */
+static int turn_can_finish_clean(const RxState*s,int p,int first){
+  RxState t=*s;
+  apply_move(t.board,p,first);
+  t.placed=1; t.first=(int16_t)first;
+  int mv2[CELLS], m2=legal_moves(t.board,p,mv2);
+  if(!m2) return !is_forbidden(s,p,first);      /* second stone skipped */
+  for(int j=0;j<m2;j++) if(!is_forbidden(&t,p,mv2[j])) return 1;
+  return 0;
+}
+/* stones this turn asks for, before the skip rule and before the ban */
+static int base_need(const RxState*s){ return s->turnNumber==0 ? 1 : 2; }
 static int need_of(const RxState*s){
   if(s->turnNumber==0) return 1;
   if(s->placed==1) return playable_count(s)?2:1;
@@ -120,7 +137,11 @@ static int need_of(const RxState*s){
 
 static int playable_count(const RxState*s){
   int mv[CELLS], n=legal_moves(s->board,s->player,mv), c=0;
-  for(int i=0;i<n;i++) if(!is_forbidden(s,s->player,mv[i])) c++;
+  int closing = (s->placed + 1 >= base_need(s));
+  for(int i=0;i<n;i++){
+    if(closing ? !is_forbidden(s,s->player,mv[i])
+               : turn_can_finish_clean(s,s->player,mv[i])) c++;
+  }
   return c;
 }
 void rx_reset(RxState*s);
@@ -164,8 +185,13 @@ int rx_legal(const RxState*s, uint8_t*mask, int safe){
   int n=legal_moves(s->board,p,mv);
   int mustDefend = safe && s->checkBy && s->checkBy==OTHER(p);
   int need=need_of(s);
+  int closing = (s->placed + 1 >= base_need(s));   /* does a stone now end the turn? */
   for(int i=0;i<n;i++){
-    if(is_forbidden(s,p,mv[i])) continue;          /* would gift the opponent a SIX */
+    if(closing){
+      if(is_forbidden(s,p,mv[i])) continue;            /* would gift the opponent a SIX */
+    } else if(!turn_can_finish_clean(s,p,mv[i])){
+      continue;   /* no way to finish this turn without gifting: not a legal opening stone */
+    }
     if(!mustDefend){ mask[mv[i]]=1; cnt++; continue; }
     int8_t t[CELLS]; memcpy(t,s->board,CELLS); apply_move(t,p,mv[i]);
     int ok=0;

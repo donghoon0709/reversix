@@ -1,0 +1,32 @@
+[
+  {
+    "a": "iter29",
+    "b": "iter20",
+    "a_color": 1,
+    "results_by_winner": {
+      "0": 0,
+      "1": 20,
+      "2": 12
+    },
+    "a_score": 0.625,
+    "games": 32,
+    "seed": 4832,
+    "sims": 32,
+    "seconds": 224.4
+  },
+  {
+    "a": "iter29",
+    "b": "iter20",
+    "a_color": 2,
+    "results_by_winner": {
+      "0": 0,
+      "1": 11,
+      "2": 21
+    },
+    "a_score": 0.65625,
+    "games": 32,
+    "seed": 4833,
+    "sims": 32,
+    "seconds": 322.0
+  }
+]

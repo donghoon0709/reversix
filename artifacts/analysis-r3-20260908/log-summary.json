@@ -1,0 +1,34 @@
+{
+  "iterations": 30,
+  "games": 18000,
+  "gradient_steps": 19574,
+  "min_policy_loss": {
+    "iter": 22,
+    "value": 1.5268
+  },
+  "evals": [
+    {
+      "iter": 9,
+      "vs_greedy": 0.936,
+      "vs_random": 1.0,
+      "elo": null
+    },
+    {
+      "iter": 19,
+      "vs_greedy": 0.882,
+      "vs_random": 1.0,
+      "elo": 852
+    },
+    {
+      "iter": 29,
+      "vs_greedy": 0.618,
+      "vs_random": 0.945,
+      "elo": 742
+    }
+  ],
+  "greedy_drop_19_to_29": 0.264,
+  "independent_binomial_95_drop": [
+    0.212878,
+    0.315122
+  ]
+}

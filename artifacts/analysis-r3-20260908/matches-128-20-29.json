@@ -1,0 +1,36 @@
+[
+  {
+    "iter": 20,
+    "sims": 128,
+    "score": 0.84375,
+    "as_black": 0.84375,
+    "as_white": 0.84375,
+    "games": 64,
+    "wilson95": [
+      0.7357170979769467,
+      0.9128525112303834
+    ],
+    "seed": 7241,
+    "parallel": 32,
+    "opponent": "greedy eps=.1",
+    "seconds": 345.5,
+    "device": "mps"
+  },
+  {
+    "iter": 29,
+    "sims": 128,
+    "score": 0.578125,
+    "as_black": 0.40625,
+    "as_white": 0.75,
+    "games": 64,
+    "wilson95": [
+      0.4560981205252726,
+      0.6913040633854843
+    ],
+    "seed": 7241,
+    "parallel": 32,
+    "opponent": "greedy eps=.1",
+    "seconds": 147.5,
+    "device": "mps"
+  }
+]

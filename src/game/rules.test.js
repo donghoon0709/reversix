@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   BOARD_SIZE, BOARD_CELLS, SIX, BLACK, WHITE, createInitialGame, placementsNeeded, turnComplete,
-  applyPlacement, getLegalPlacements, getSixLines, reduceGame,
-  isForbiddenPlacement, getPlayablePlacements, playableFor, forbiddenFor,
+  applyPlacement, getLegalPlacements, getSixLines, reduceGame, turnComplete as isTurnComplete,
+  isForbiddenPlacement, getPlayablePlacements, playableFor, forbiddenFor, completesTurn,
 } from './rules.js';
 
 const cell = (r, c) => r * BOARD_SIZE + c;
@@ -107,21 +107,60 @@ describe('forbidden placements (may not hand the opponent a SIX)', () => {
     return b;
   };
 
-  it('bans the stone that shrinks an opposing overline into a six', () => {
+  it('leaves the first of two stones alone when the turn can still finish cleanly', () => {
     const b = overlineBoard();
     expect(getSixLines(b, WHITE)).toHaveLength(0);
-    const s = stateFor(b, BLACK);
-    expect(getLegalPlacements(b, BLACK)).toContain(cell(3, 2));
-    expect(forbiddenFor(s)).toEqual([cell(3, 2)]);
-    expect(playableFor(s)).not.toContain(cell(3, 2));
-    expect(isForbiddenPlacement(b, b, BLACK, cell(3, 2))).toBe(true);
+    const s = stateFor(b, BLACK);                 // a normal two-stone turn
+    expect(completesTurn(s)).toBe(false);
+    expect(forbiddenFor(s)).toEqual([]);
+    // C4 gifts White a six on its own, yet stays playable: a second stone can undo it
+    expect(playableFor(s)).toContain(cell(3, 2));
+    const after = reduceGame(s, { type: 'PLACE', cell: cell(3, 2) });
+    expect(after.announcement).toBe('');
+    expect(after.provisional.placements).toEqual([cell(3, 2)]);
+    expect(playableFor(after).length).toBeGreaterThan(0);
   });
 
-  it('refuses the move in the reducer', () => {
-    const s = stateFor(overlineBoard(), BLACK);
-    const after = reduceGame(s, { type: 'PLACE', cell: cell(3, 2) });
-    expect(after.announcement).toBe('FORBIDDEN_GIVES_SIX');
-    expect(after.provisional.placements).toEqual([]);
+  it('refuses a first stone from which no clean finish exists', () => {
+    // white overline with only one black stone able to reach it, and nothing else on the
+    // board to play a second stone with: the turn could only end having gifted a six
+    const b = Array(BOARD_CELLS).fill(null);
+    for (let c = 2; c <= 8; c++) b[cell(4, c)] = WHITE;
+    b[cell(2, 2)] = BLACK; b[cell(5, 2)] = BLACK;
+    const s = stateFor(b, BLACK);
+    for (const first of getLegalPlacements(b, BLACK)) {
+      const a = applyPlacement(b, BLACK, first);
+      const seconds = getLegalPlacements(a.board, BLACK);
+      const clean = seconds.length
+        ? seconds.some(sec => {
+            const c2 = applyPlacement(a.board, BLACK, sec);
+            return c2.ok && getSixLines(c2.board, WHITE).length === 0;
+          })
+        : getSixLines(a.board, WHITE).length === 0;
+      expect(playableFor(s).includes(first)).toBe(clean);
+    }
+  });
+
+  it('bans a second stone that would leave the gift standing', () => {
+    const s = reduceGame(stateFor(overlineBoard(), BLACK), { type: 'PLACE', cell: cell(3, 2) });
+    expect(completesTurn(s)).toBe(true);
+    // the first stone made White a six; any second stone that leaves it is banned
+    for (const c of forbiddenFor(s)) {
+      const a = applyPlacement(s.provisional.board, BLACK, c);
+      expect(getSixLines(a.board, WHITE).length).toBeGreaterThan(0);
+    }
+    for (const c of playableFor(s)) {
+      const a = applyPlacement(s.provisional.board, BLACK, c);
+      expect(getSixLines(a.board, WHITE)).toHaveLength(0);
+    }
+  });
+
+  it('bans a one-stone turn that gifts a six, since that stone ends the turn', () => {
+    const s = stateFor(overlineBoard(), BLACK, 0);      // Black's opening: one stone
+    expect(completesTurn(s)).toBe(true);
+    expect(forbiddenFor(s)).toContain(cell(3, 2));
+    expect(reduceGame(s, { type: 'PLACE', cell: cell(3, 2) }).announcement)
+      .toBe('FORBIDDEN_GIVES_SIX');
   });
 
   it('does not ban breaking a six that was already there', () => {
@@ -139,6 +178,66 @@ describe('forbidden placements (may not hand the opponent a SIX)', () => {
     const g = createInitialGame();
     expect(forbiddenFor(g)).toEqual([]);
     expect(playableFor(g)).toEqual(getLegalPlacements(g.board, BLACK));
+  });
+});
+
+describe('passing when there is nothing to play', () => {
+  // a board where neither colour can flip anything
+  const deadBoard = () => {
+    const b = Array(BOARD_CELLS).fill(null);
+    b[0] = BLACK; b[1] = BLACK; b[cell(9, 9)] = WHITE;
+    return b;
+  };
+
+  it('treats a turn with no playable cell as complete, and committing it passes', () => {
+    const s = stateFor(deadBoard(), BLACK, 3);
+    expect(getLegalPlacements(s.board, BLACK)).toEqual([]);
+    expect(playableFor(s)).toEqual([]);
+    expect(turnComplete(s)).toBe(true);          // so the UI can offer the pass
+    const after = reduceGame(s, { type: 'COMMIT_TURN' });
+    expect(after.events.some(e => e.endsWith('PASS'))).toBe(true);
+  });
+
+  it('ends on stone count once both sides have passed', () => {
+    let s = stateFor(deadBoard(), BLACK, 3);
+    s = reduceGame(s, { type: 'COMMIT_TURN' });   // black passes
+    expect(s.terminal).toBe(null);               // one pass is not the end
+    s = reduceGame(s, { type: 'COMMIT_TURN' });   // white cannot move either
+    expect(s.terminal).toEqual({ winner: BLACK, reason: 'PASSES' });  // 2 black vs 1 white
+  });
+});
+
+describe('a first stone that leads nowhere', () => {
+  // White to move, checked, with exactly three legal cells — each of which shrinks a
+  // black overline down to a six. Every turn from here is banned, so White must pass.
+  const stuckState = () => {
+    const moves = [56,66,53,52,43,33,62,34,77,57,23,63,58,72,35,12,74,65,42,22,81,32,67,
+      24,76,64,2,1,71,68,61,51,69,78,80,46,21,36,14,5,26,48,27,15,87,47,16,18,3,91,50,25,
+      59,75,13,38,70,39,31,49,41,40,28,11,84,73,85,60,94,95,0,20,90,98,9,30,92,88,4,83,93,
+      37,82,7,99,79,86,97,17,6,10,8,96];
+    let s = createInitialGame();
+    for (const m of moves) {
+      s = reduceGame(s, { type: 'PLACE', cell: m });
+      if (turnComplete(s)) s = reduceGame(s, { type: 'COMMIT_TURN' });
+    }
+    return s;
+  };
+
+  it('offers the legal first stones so the player can see the trap, and passes', () => {
+    const s = stuckState();
+    expect(s.activePlayer).toBe(WHITE);
+    expect(playableFor(s)).toEqual([19, 29, 89]);   // J2, J3, J9
+    expect(forbiddenFor(s)).toEqual([]);            // no ban marks on the first stone
+    expect(turnComplete(s)).toBe(true);             // with nothing placed, that is the pass
+  });
+
+  it('marks every second stone forbidden and refuses to commit the turn', () => {
+    const s = place(stuckState(), 19);
+    expect(playableFor(s)).toEqual([]);
+    expect(forbiddenFor(s)).toEqual([29, 89]);      // the reason, spelled out on the board
+    expect(turnComplete(s)).toBe(false);            // the dead end cannot be committed
+    expect(reduceGame(s, { type: 'COMMIT_TURN' }).announcement).toBe('Incomplete turn');
+    expect(turnComplete(reduceGame(s, { type: 'RESET_TURN' }))).toBe(true);
   });
 });
 
