@@ -12,22 +12,23 @@ export const SIDES = [
   { id: 'white', label: '후공 (백)', hint: '컴퓨터가 먼저 둡니다' },
 ]
 
-export default function ModeDialog({ open, onClose, onStart, unavailable = {} }) {
+export default function ModeDialog({ open, onClose, onStart, unavailable = {}, practiceDisabled = false, defaultPractice = false }) {
   const ref = useRef(null)
   const cancelRef = useRef(null)
   const [mode, setMode] = useState(null)
   const [pasted, setPasted] = useState('')
   const [loadError, setLoadError] = useState('')
+  const [practice, setPractice] = useState(defaultPractice)
 
   useEffect(() => {
     const d = ref.current
     if (open && d && !d.open) { d.showModal(); cancelRef.current?.focus() }
     if (!open && d?.open) d.close()
-    if (!open) { setMode(null); setPasted(''); setLoadError('') }
-  }, [open])
+    if (!open) { setMode(null); setPasted(''); setLoadError('') } else { setPractice(defaultPractice) }
+  }, [open, defaultPractice])
 
   const pickMode = id => {
-    if (id === 'human') { onStart(id, 'black'); return }
+    if (id === 'human') { onStart(id, 'black', null, practice); return }
     setMode(id)                       // computer opponents need a side as well; review needs a file
   }
 
@@ -63,6 +64,19 @@ export default function ModeDialog({ open, onClose, onStart, unavailable = {} })
               </button>
             ))}
           </div>
+          <label className="control-group practice-toggle">
+            <input
+              type="checkbox"
+              data-testid="practice-toggle"
+              checked={practice}
+              disabled={practiceDisabled}
+              onChange={e => setPractice(e.target.checked)}
+            />
+            <span>
+              <strong>연습 모드</strong>
+              <small>{practiceDisabled ? '학습된 가중치가 아직 없습니다' : '우세 막대와 추천 착수를 보드에 표시합니다'}</small>
+            </span>
+          </label>
           <div className="control-group">
             <button ref={cancelRef} className="control" onClick={onClose}>취소</button>
           </div>
@@ -71,6 +85,7 @@ export default function ModeDialog({ open, onClose, onStart, unavailable = {} })
         <>
           <h2>기보 불러오기</h2>
           <p>저장한 .txt 기보 파일을 고르거나, 기보 텍스트 또는 공유 링크를 붙여넣으세요.</p>
+          <p>기보 감상에서는 연습 모드와 상관없이 항상 우세 막대와 추천 착수가 표시됩니다.</p>
           <div className="control-group">
             <input type="file" accept=".txt" onChange={handleFile} data-testid="record-file-input"/>
           </div>
@@ -96,7 +111,7 @@ export default function ModeDialog({ open, onClose, onStart, unavailable = {} })
           <p>{MODES.find(m => m.id === mode)?.label} 상대로 어느 쪽을 잡으시겠습니까?</p>
           <div className="mode-list">
             {SIDES.map(sd => (
-              <button key={sd.id} className="control mode-option" onClick={() => onStart(mode, sd.id)} type="button">
+              <button key={sd.id} className="control mode-option" onClick={() => onStart(mode, sd.id, null, practice)} type="button">
                 <strong>{sd.label}</strong>
                 <small>{sd.hint}</small>
               </button>

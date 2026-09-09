@@ -5,7 +5,9 @@ function coordinate(cell) {
   return `${String.fromCharCode(65 + (cell % BOARD_SIZE))}${Math.floor(cell / BOARD_SIZE) + 1}`
 }
 
-export default function Board({ state, dispatch, locked = false, review = false, onStep = () => {} }) {
+const NO_HINTS = new Map()
+
+export default function Board({ state, dispatch, locked = false, review = false, onStep = () => {}, hints = NO_HINTS }) {
   const [focusCell, setFocusCell] = useState(0)
   const refs = useRef([])
   // Separate the stones the opponent actually placed from the stones those moves flipped:
@@ -100,18 +102,26 @@ export default function Board({ state, dispatch, locked = false, review = false,
               const flippingPlayer = flipping.get(cell)
               const unavailable = !canPlace && !canUndo
               const moveOrder = lastMoves.get(cell)
+              const hint = hints.get(cell)
+              const hintNote = hint ? ` 추천 ${hint.rank}순위 ${Math.round(hint.prob * 100)}%` : ''
               const lastNote = moveOrder ? `, 직전 상대 착수 ${moveOrder}번째`
                 : lastFlips.has(cell) ? ', 직전 착수로 뒤집힘' : ''
               const banNote = isForbidden ? ' 금수: 상대에게 SIX를 만들어 줍니다' : ''
               const label = review
-                ? `${coordinate(cell)} ${value === BLACK ? '흑돌' : value === WHITE ? '백돌' : '빈 칸'}${lastNote}`
-                : `${coordinate(cell)} ${value === BLACK ? '흑돌' : value === WHITE ? '백돌' : '빈 칸'}${lastNote}${canUndo ? ' 최신 착수 취소 가능' : !occupied ? canPlace ? ' 현재 턴에 착수 가능' : banNote || ' 현재 턴에 착수 불가' : ''}`
-              const className = `board-cell ${value === BLACK ? 'is-black' : value === WHITE ? 'is-white' : 'is-empty'} ${!review && canPlace ? 'is-legal' : ''} ${!review && isForbidden ? 'is-forbidden-move' : ''} ${provisionalIndex >= 0 ? 'is-provisional' : ''} ${flippingPlayer ? `is-flipping is-flipping-to-${flippingPlayer === BLACK ? 'black' : 'white'}` : ''} ${moveOrder ? 'is-last-move' : ''} ${lastFlips.has(cell) ? 'is-recent' : ''} ${winning.has(cell) ? 'is-winning' : ''}`
+                ? `${coordinate(cell)} ${value === BLACK ? '흑돌' : value === WHITE ? '백돌' : '빈 칸'}${lastNote}${hintNote}`
+                : `${coordinate(cell)} ${value === BLACK ? '흑돌' : value === WHITE ? '백돌' : '빈 칸'}${lastNote}${canUndo ? ' 최신 착수 취소 가능' : !occupied ? canPlace ? ' 현재 턴에 착수 가능' : banNote || ' 현재 턴에 착수 불가' : ''}${hintNote}`
+              const className = `board-cell ${value === BLACK ? 'is-black' : value === WHITE ? 'is-white' : 'is-empty'} ${!review && canPlace ? 'is-legal' : ''} ${!review && isForbidden ? 'is-forbidden-move' : ''} ${provisionalIndex >= 0 ? 'is-provisional' : ''} ${flippingPlayer ? `is-flipping is-flipping-to-${flippingPlayer === BLACK ? 'black' : 'white'}` : ''} ${moveOrder ? 'is-last-move' : ''} ${lastFlips.has(cell) ? 'is-recent' : ''} ${winning.has(cell) ? 'is-winning' : ''} ${hint ? `is-hint is-hint-${hint.rank}` : ''}`
               const content = (
                 <>
                   {row === 0 && <span className="coord coord-file" aria-hidden="true">{String.fromCharCode(65 + column)}</span>}
                   {column === 0 && <span className="coord coord-rank" aria-hidden="true">{row + 1}</span>}
                   {!review && isForbidden && <span className="ban-mark" aria-hidden="true">🚫</span>}
+                  {hint && (
+                    <span
+                      aria-hidden="true"
+                      className={`hint-stone ${state.activePlayer === BLACK ? 'hint-stone-black' : 'hint-stone-white'}`}
+                    />
+                  )}
                   {provisionalIndex >= 0 && <small>{provisionalIndex + 1}</small>}
                   {provisionalIndex < 0 && moveOrder && <small>{moveOrder}</small>}
                 </>

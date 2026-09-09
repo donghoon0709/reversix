@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import Board from './components/Board.jsx'
 import RulesDialog from './components/RulesDialog.jsx'
 import ModeDialog, { MODES } from './components/ModeDialog.jsx'
 import ReviewControls from './components/ReviewControls.jsx'
+import EvalBar from './components/EvalBar.jsx'
 import { createInitialGame, reduceGame, placementsNeeded, turnComplete, canCompleteTurn, BLACK, WHITE, BOARD_SIZE } from './game/rules.js'
 import { searchPlacement } from './game/search.js'
 import { ReversixNet } from './game/nn.js'
+import { analyzePosition } from './game/analysis.js'
 import { replay, parseUrl, formatText, formatUrl } from './game/record.js'
 
 const MODEL_URL = '/model/latest'
@@ -17,6 +19,17 @@ const STONE_GAP_MS = 500        // pause between the two stones of one turn
 const COMPUTER_MODE_IDS = MODES.map(m => m.id).filter(id => id !== 'human' && id !== 'review')
 const sleep = ms => new Promise(r => window.setTimeout(r, ms))
 const label = p => (p === BLACK ? '흑' : '백')
+const NO_HINTS = new Map()          // stable identities so Board and EvalBar do not see fresh
+const NO_MOVES = []                 // collections on every render
+
+// A turn with all its stones already down waits on 턴 확정, and the network never sees such
+// a position: training commits a turn the moment it is complete (see stepGame in
+// src/game/search.js). Analysing it as-is asks for placements the player cannot make and
+// reads a value off a state the value head was never trained on, so analyse the committed
+// continuation instead. Its moves belong to the opponent, so the caller drops the hints.
+const awaitingCommit = state => !state.terminal
+  && state.provisional.placements.length >= placementsNeeded(state)
+const positionToAnalyse = state => (awaitingCommit(state) ? reduceGame(state, { type: 'COMMIT_TURN' }) : state)
 
 const countStones = board => board.reduce(
   (a, v) => (v === BLACK ? { ...a, black: a.black + 1 } : v === WHITE ? { ...a, white: a.white + 1 } : a),
@@ -69,11 +82,18 @@ export default function App() {
   const [copyStatus, setCopyStatus] = useState('')
   const rulesButton = useRef(null), newButton = useRef(null)
   const netRef = useRef(null)
+  const netLoading = useRef(false)    // guards the analysis loader against racing chooseMode's own load
   const busy = useRef(false)
   const [modelMissing, setModelMissing] = useState(false)
+  const [practice, setPractice] = useState(false)
+  const [netReady, setNetReady] = useState(false)   // netRef is a ref, so this is what triggers a re-render once it loads
+  const [analysis, setAnalysis] = useState(null)
 
   const reviewing = review != null
   const view = reviewing ? review.rep.states[review.index] : state
+  // Practice hints and the eval bar need the same AZ-32 weights as the computer opponent;
+  // review always analyses regardless of the practice toggle.
+  const analysisOn = (reviewing || practice) && !modelMissing
 
   useEffect(() => {
     fetch(`${MODEL_URL}.json`, { method: 'HEAD' })
@@ -107,9 +127,10 @@ export default function App() {
   const closeRules = () => { setRulesOpen(false); rulesButton.current?.focus() }
   const openNew = () => { newButton.current = document.activeElement; setModeOpen(true) }
 
-  const chooseMode = useCallback(async (id, side, cells) => {
+  const chooseMode = useCallback(async (id, side, cells, practiceOn) => {
     setModeOpen(false)
     if (id === 'review') {
+      // review analyses regardless of the toggle, so the practice flag is left alone here
       const rep = replay(cells)
       setReview({ cells, rep, index: rep.states.length - 1 })
       setMode('review')
@@ -117,16 +138,21 @@ export default function App() {
       return
     }
     setReview(null)
+    setPractice(practiceOn)
     if (id === 'net' && !netRef.current) {
       setNetStatus('신경망 불러오는 중…')
+      netLoading.current = true
       try {
         netRef.current = await ReversixNet.load(MODEL_URL)
+        setNetReady(true)          // a ref alone does not re-render
         setNetStatus('')
       } catch (err) {
         setNetStatus(`신경망을 불러오지 못했습니다: ${err.message}`)
         setMode('human'); dispatch({ type: 'NEW_GAME' }); newButton.current?.focus()
+        netLoading.current = false
         return
       }
+      netLoading.current = false
     }
     setMode(id)
     setHumanSide(side === 'white' ? WHITE : BLACK)
@@ -179,6 +205,60 @@ export default function App() {
     })
     return () => { cancelled = true; busy.current = false; setThinking(false); setProgress(null) }
   }, [computerToMove, state, mode])
+
+  // Practice hints and the eval bar need the same weights as the AZ-32 opponent. This
+  // loads them independently of chooseMode's own load, guarded so the two never race.
+  useEffect(() => {
+    if (!analysisOn || netRef.current || netLoading.current) return
+    let cancelled = false
+    netLoading.current = true
+    setNetStatus('신경망 불러오는 중…')
+    ReversixNet.load(MODEL_URL).then(net => {
+      if (cancelled) return
+      netRef.current = net
+      setNetReady(true)
+      setNetStatus('')
+    }).catch(err => {
+      if (cancelled) return
+      setNetStatus(`신경망을 불러오지 못했습니다: ${err.message}`)
+    }).finally(() => { netLoading.current = false })
+    return () => { cancelled = true }
+  }, [analysisOn])
+
+  // Recompute whenever the displayed position changes. Deferred a tick so the just-placed
+  // stone paints before the ~66ms forward pass blocks the main thread.
+  useEffect(() => {
+    if (!analysisOn) { setAnalysis(null); return }
+    if (thinking || !netRef.current) return   // the search already owns the main thread; keep the last reading up
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      if (cancelled) return
+      setAnalysis({
+        ...analyzePosition(netRef.current, positionToAnalyse(view)),
+        for: view,
+        opponentToMove: awaitingCommit(view),
+      })
+    }, 0)
+    return () => { cancelled = true; window.clearTimeout(timer) }
+  }, [analysisOn, thinking, view, netReady])
+
+  const fresh = analysis?.for === view
+  const occupied = view.provisional.board.filter(v => v != null).length
+  // A stale reading points at cells that may now be occupied, so hints only ever come
+  // from a reading that matches what is on screen; review always shows them, otherwise
+  // only on the human's own turn. A turn waiting on 턴 확정 has no move left to suggest:
+  // its reading belongs to the position after the commit, so those moves are the
+  // opponent's and must not be drawn as suggestions.
+  const suggestions = useMemo(() => {
+    if (!fresh || !analysis || analysis.terminal || analysis.opponentToMove) return NO_MOVES
+    if (!reviewing && computerToMove) return NO_MOVES
+    return analysis.moves.slice(0, 3)
+  }, [fresh, analysis, reviewing, computerToMove])
+  // the board and the panel's list are the same suggestions, so they can never disagree
+  const hints = useMemo(
+    () => (suggestions.length ? new Map(suggestions.map((m, i) => [m.cell, { rank: i + 1, prob: m.prob }])) : NO_HINTS),
+    [suggestions],
+  )
 
   const recentSummary = view.recentEffects?.length
     ? view.recentEffects.map(e => `${e.player === BLACK ? '흑' : '백'} ${e.cell != null ? coord(e.cell) : ''} 착수 · ${e.flips?.length ?? 0}개 뒤집힘`).join(', ')
@@ -234,6 +314,32 @@ export default function App() {
     })
   }, [])
 
+  // In review mode this renders below ReviewControls instead of above the board (see the
+  // <main> JSX below): its line count varies from position to position — 직전 수, pass
+  // notices, 체크, announcements and 게임 종료 all come and go — and above the board that
+  // shift carries the 처음/이전/다음/마지막 buttons along with it, sliding them out from under
+  // the pointer while stepping. Below ReviewControls the same shifting is harmless.
+  const statusSection = (
+    <section aria-live="polite">
+      <p>모드: <strong>{modeLabel}</strong>{mode !== 'human' && mode !== 'review' && <> · 나는 {label(humanSide)}, 컴퓨터는 {label(computerSide)}</>}</p>
+      <p>현재 플레이어: <strong>{label(view.activePlayer)}</strong>{thinking && <span className="thinking"> · 생각 중{progress ? ` ${progress[0]}/${progress[1]}` : ''}…</span>}</p>
+      <p>필요한 배치: {need} / 현재 배치: {view.provisional.placements.length}</p>
+      {lastMove && <p className="last-move-line">직전 수 — <strong>{label(lastMove.who)}</strong> {lastMove.cells.map(coord).join(' → ')}</p>}
+      {passes.map((t, i) => <p key={i} className="pass-notice">{t}</p>)}
+      {!reviewing && stuck && <p className="stuck-notice">둘 수 있는 곳이 없습니다.</p>}
+      {!reviewing && deadEnd && <p className="stuck-notice">이 수를 두면 둘째 수를 둘 곳이 없습니다. 턴을 초기화하고 다른 곳에 두세요.</p>}
+      {view.checkedPlayer && <p>체크: {label(view.checkedPlayer)}</p>}
+      {netStatus && <p>{netStatus}</p>}
+      {view.announcement && <p>{view.announcement}</p>}
+      {view.terminal && <p>게임 종료: {outcomeText(view)}</p>}
+      {reviewing && review.rep.error && (
+        <p className="stuck-notice">
+          기보가 {review.rep.error.index + 1}번째 수({coord(review.rep.error.cell)})에서 깨졌습니다: {review.rep.error.reason} — 그 앞까지는 넘겨볼 수 있습니다.
+        </p>
+      )}
+    </section>
+  )
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -259,25 +365,11 @@ export default function App() {
       </header>
       <main className="app-main">
         {linkError && <p className="stuck-notice">공유 링크를 열지 못했습니다: {linkError}</p>}
-        <section aria-live="polite">
-          <p>모드: <strong>{modeLabel}</strong>{mode !== 'human' && mode !== 'review' && <> · 나는 {label(humanSide)}, 컴퓨터는 {label(computerSide)}</>}</p>
-          <p>현재 플레이어: <strong>{label(view.activePlayer)}</strong>{thinking && <span className="thinking"> · 생각 중{progress ? ` ${progress[0]}/${progress[1]}` : ''}…</span>}</p>
-          <p>필요한 배치: {need} / 현재 배치: {view.provisional.placements.length}</p>
-          {lastMove && <p className="last-move-line">직전 수 — <strong>{label(lastMove.who)}</strong> {lastMove.cells.map(coord).join(' → ')}</p>}
-          {passes.map((t, i) => <p key={i} className="pass-notice">{t}</p>)}
-          {!reviewing && stuck && <p className="stuck-notice">둘 수 있는 곳이 없습니다.</p>}
-          {!reviewing && deadEnd && <p className="stuck-notice">이 수를 두면 둘째 수를 둘 곳이 없습니다. 턴을 초기화하고 다른 곳에 두세요.</p>}
-          {view.checkedPlayer && <p>체크: {label(view.checkedPlayer)}</p>}
-          {netStatus && <p>{netStatus}</p>}
-          {view.announcement && <p>{view.announcement}</p>}
-          {view.terminal && <p>게임 종료: {outcomeText(view)}</p>}
-          {reviewing && review.rep.error && (
-            <p className="stuck-notice">
-              기보가 {review.rep.error.index + 1}번째 수({coord(review.rep.error.cell)})에서 깨졌습니다: {review.rep.error.reason} — 그 앞까지는 넘겨볼 수 있습니다.
-            </p>
-          )}
-        </section>
-        <Board state={view} dispatch={dispatch} locked={computerToMove || thinking} review={reviewing} onStep={handleReviewStep}/>
+        {!reviewing && statusSection}
+        {analysisOn && analysis && (
+          <EvalBar blackWin={analysis.blackWin} occupied={occupied} moves={suggestions} stale={!fresh}/>
+        )}
+        <Board state={view} dispatch={dispatch} locked={computerToMove || thinking} review={reviewing} onStep={handleReviewStep} hints={hints}/>
         {reviewing ? (
           <ReviewControls
             index={review.index}
@@ -291,10 +383,11 @@ export default function App() {
             <button className="control primary" disabled={!turnComplete(state) || !!state.terminal || computerToMove} onClick={() => dispatch({ type: 'COMMIT_TURN' })}>{commitLabel}</button>
           </div>
         )}
+        {reviewing && statusSection}
         <p>최근 효과: {recentSummary}</p>
       </main>
       <RulesDialog open={rulesOpen} onClose={closeRules}/>
-      <ModeDialog unavailable={modelMissing ? { net: '학습된 가중치가 아직 없습니다' } : {}} open={modeOpen} onClose={() => { setModeOpen(false); newButton.current?.focus() }} onStart={chooseMode}/>
+      <ModeDialog unavailable={modelMissing ? { net: '학습된 가중치가 아직 없습니다' } : {}} practiceDisabled={modelMissing} defaultPractice={practice} open={modeOpen} onClose={() => { setModeOpen(false); newButton.current?.focus() }} onStart={chooseMode}/>
     </div>
   )
 }
