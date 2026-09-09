@@ -23,6 +23,21 @@ const startVsAgent = async (page, side = /선공/) => {
   await expect(page.getByText('모드:')).toContainText('AZ-32', { timeout: 60000 })
 }
 
+/** Plays Black's one-stone opening and White's full two-stone turn, saves the result, and
+ *  opens the share link — the shortest deterministic path into review mode for tests that
+ *  only care about the review UI itself, not about how the game got there. */
+const startReview = async page => {
+  await startTwoPlayer(page)
+  await page.getByRole('gridcell', { name: /E4 빈 칸/ }).click()
+  await page.getByRole('button', { name: '턴 확정' }).click()
+  await page.locator('.is-legal').first().click()
+  await page.locator('.is-legal').first().click()
+  await page.getByRole('button', { name: '턴 확정' }).click()
+  const link = await page.getByRole('textbox', { name: '공유 링크' }).inputValue()
+  await page.goto(link)
+  await expect(page.getByText('모드:')).toContainText('기보 감상')
+}
+
 test.describe('Reversix public UI', () => {
   test('greets a visitor with the opponent chooser', async ({ page }) => {
     await page.goto('/')
@@ -461,5 +476,147 @@ test.describe('Reversix public UI', () => {
     await expect(page.getByText('현재 플레이어:')).toContainText('백')
     await expect(page.getByText('현재 플레이어:')).toContainText('흑', { timeout: 120000 })
     await expect(page.locator('.is-legal').first()).toBeVisible()   // black may move again
+  })
+
+  test('offers the save controls only once there is something to save', async ({ page }) => {
+    await startTwoPlayer(page)
+    const saveButton = page.getByRole('button', { name: '기보 저장' })
+    const shareLink = page.getByRole('textbox', { name: '공유 링크' })
+    // a fresh game has no committed history, so there is nothing to share yet
+    await expect(saveButton).toBeDisabled()
+    await expect(shareLink).toHaveValue('')
+
+    await page.getByRole('gridcell', { name: /E4 빈 칸/ }).click()
+    await page.getByRole('button', { name: '턴 확정' }).click()
+
+    await expect(saveButton).toBeEnabled()
+    await expect(shareLink).toHaveValue(/\?g=.+$/)
+  })
+
+  test('a share link round-trips into review with the same final position', async ({ page }) => {
+    await startTwoPlayer(page)
+    await page.getByRole('gridcell', { name: /E4 빈 칸/ }).click()
+    await page.getByRole('button', { name: '턴 확정' }).click()
+    const firstWhite = page.locator('.is-legal').first()
+    const firstWhiteCoord = (await firstWhite.getAttribute('aria-label')).match(/^[A-J]\d+/)[0]
+    await firstWhite.click()
+    await page.locator('.is-legal').first().click()
+    await page.getByRole('button', { name: '턴 확정' }).click()
+
+    // read the live board's final colours before leaving play mode, so review can be
+    // checked against ground truth rather than against another guess
+    const e4Colour = (await page.getByRole('gridcell', { name: /^E4 / }).getAttribute('aria-label')).match(/(흑돌|백돌|빈 칸)/)[1]
+    const firstWhiteColour = (await page.locator(`button[role="gridcell"][aria-label^="${firstWhiteCoord} "]`).getAttribute('aria-label')).match(/(흑돌|백돌|빈 칸)/)[1]
+
+    const link = await page.getByRole('textbox', { name: '공유 링크' }).inputValue()
+    expect(link).toMatch(/\?g=[^&]+$/)
+
+    await page.goto(link)
+    // a shared link bypasses the mode chooser entirely — it opens straight into review
+    await expect(page.getByRole('dialog')).toBeHidden()
+    await expect(page.getByText('모드:')).toContainText('기보 감상')
+    const [, cur, total] = (await page.locator('.review-position').innerText()).match(/(\d+) \/ (\d+)/)
+    expect(cur).toBe(total)   // opens on the LAST snapshot, not the start
+
+    // this is the load-bearing check: the replayed board must show the exact same stones
+    // the live game ended with, not just "some" review UI
+    await expect(page.getByRole('cell', { name: new RegExp(`^E4 ${e4Colour}`) })).toBeVisible()
+    await expect(page.locator(`[role="cell"][aria-label^="${firstWhiteCoord} "]`)).toHaveAttribute('aria-label', new RegExp(`^${firstWhiteCoord} ${firstWhiteColour}`))
+  })
+
+  test('steps through review positions with the buttons, and the board actually changes', async ({ page }) => {
+    await startReview(page)
+    const e5 = () => page.getByRole('cell', { name: /^E5 / })
+
+    await page.getByRole('button', { name: '처음' }).click()
+    await expect(page.locator('.review-position')).toContainText('1 / 4')
+    await expect(e5()).toHaveAttribute('aria-label', /^E5 백돌/)   // untouched opening position
+
+    await page.getByRole('button', { name: '다음' }).click()
+    await expect(page.locator('.review-position')).toContainText('2 / 4')
+    // Black's E4 opening flips E5 — a deterministic, concrete board change to check for,
+    // not just a readout that happens to move
+    await expect(e5()).toHaveAttribute('aria-label', /^E5 흑돌/)
+
+    await page.getByRole('button', { name: '마지막' }).click()
+    await expect(page.locator('.review-position')).toContainText('4 / 4')
+  })
+
+  test('steps through review with the keyboard, focused on the board wrapper', async ({ page }) => {
+    await startReview(page)
+    const wrapper = page.locator('.board-wrapper')
+    await wrapper.focus()
+    await expect(page.locator('.review-position')).toContainText('4 / 4')
+
+    await page.keyboard.press('ArrowLeft')
+    await expect(page.locator('.review-position')).toContainText('3 / 4')
+    await page.keyboard.press('ArrowRight')
+    await expect(page.locator('.review-position')).toContainText('4 / 4')
+    await page.keyboard.press('Home')
+    await expect(page.locator('.review-position')).toContainText('1 / 4')
+    await page.keyboard.press('End')
+    await expect(page.locator('.review-position')).toContainText('4 / 4')
+  })
+
+  test('keeps the review board read-only', async ({ page }) => {
+    await startReview(page)
+    // review cells are role="cell" divs, never the role="gridcell" buttons play mode uses
+    await expect(page.locator('button[role="gridcell"]')).toHaveCount(0)
+    await expect(page.getByRole('cell')).toHaveCount(100)
+    await expect(page.getByRole('button', { name: '턴 확정' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: '턴 초기화' })).toHaveCount(0)
+
+    const cell = page.getByRole('cell', { name: /^E5 / })
+    const before = await cell.getAttribute('aria-label')
+    await cell.click()
+    await expect(cell).toHaveAttribute('aria-label', before)
+  })
+
+  test('loads a pasted share link straight into review', async ({ page }) => {
+    await startTwoPlayer(page)
+    await page.getByRole('gridcell', { name: /E4 빈 칸/ }).click()
+    await page.getByRole('button', { name: '턴 확정' }).click()
+    const link = await page.getByRole('textbox', { name: '공유 링크' }).inputValue()
+
+    await page.getByRole('button', { name: '새 게임' }).click()
+    await page.getByRole('button', { name: '기보 감상' }).click()
+    await page.getByTestId('record-paste-input').fill(link)
+    await page.getByRole('button', { name: '불러오기' }).click()
+
+    await expect(page.getByRole('dialog')).toBeHidden()
+    await expect(page.getByText('모드:')).toContainText('기보 감상')
+    // Black's opening turn alone: the initial position plus the one after it
+    await expect(page.locator('.review-position')).toContainText('2 / 2')
+  })
+
+  test('shows an error and keeps the dialog open for a garbage paste', async ({ page }) => {
+    await startTwoPlayer(page)
+    await page.getByRole('button', { name: '새 게임' }).click()
+    await page.getByRole('button', { name: '기보 감상' }).click()
+    await page.getByTestId('record-paste-input').fill('not a game record at all')
+    await page.getByRole('button', { name: '불러오기' }).click()
+
+    await expect(page.getByTestId('record-load-error')).toBeVisible()
+    await expect(page.getByRole('dialog')).toBeVisible()
+  })
+
+  test('loads a saved .txt game record from disk', async ({ page }) => {
+    await startTwoPlayer(page)
+    await page.getByRole('gridcell', { name: /E4 빈 칸/ }).click()
+    await page.getByRole('button', { name: '턴 확정' }).click()
+
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('button', { name: '기보 저장' }).click(),
+    ])
+    const filePath = await download.path()
+
+    await page.getByRole('button', { name: '새 게임' }).click()
+    await page.getByRole('button', { name: '기보 감상' }).click()
+    await page.getByTestId('record-file-input').setInputFiles(filePath)
+
+    await expect(page.getByRole('dialog')).toBeHidden()
+    await expect(page.getByText('모드:')).toContainText('기보 감상')
+    await expect(page.locator('.review-position')).toContainText('2 / 2')
   })
 })

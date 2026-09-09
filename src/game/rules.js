@@ -27,7 +27,7 @@ export function createInitialGame() {
   return {
     board, activePlayer: BLACK, checkedPlayer: null, turnNumber: 0, consecutivePasses: 0,
     turnStart, provisional: { placements: [], effects: [], board: board.slice() },
-    recentEffects: [], announcement: '', terminal: null, events: [],
+    recentEffects: [], announcement: '', terminal: null, events: [], history: [],
   };
 }
 
@@ -230,7 +230,7 @@ function resolve(state) {
     turnNumber: s.turnNumber, consecutivePasses: s.consecutivePasses, turnStart,
     provisional: { placements: [], effects: [], board: s.board.slice() },
     recentEffects: state.provisional.effects, announcement: '',
-    terminal: s.terminal, events,
+    terminal: s.terminal, events, history: [...(state.history || []), ...state.provisional.placements],
   };
 }
 
