@@ -1,15 +1,52 @@
 import { test, expect } from '@playwright/test'
 
+/** The site greets every visitor with the opponent chooser, and it is modal — nothing on
+ *  the board can be touched until a mode is picked. */
+const startTwoPlayer = async page => {
+  await page.goto('/')
+  await page.getByRole('button', { name: '2인 대전' }).click()
+  // choosing a mode closes the dialog, starts a new game and moves focus onto the board;
+  // a test that touches the board before that would have its focus stolen
+  await expect(page.getByRole('dialog')).toBeHidden()
+  await expect(page.getByText('모드:')).toContainText('2인 대전')
+  // focus settles on 새 게임 a moment after the dialog closes; touching the board before
+  // that would have its focus stolen back
+  await expect(page.getByRole('button', { name: '새 게임' })).toBeFocused()
+}
+
+/** Pick AZ-32 and a colour, then wait for the weights to land: the board is only reset
+ *  once they have, and a stone placed before that is thrown away. */
+const startVsAgent = async (page, side = /선공/) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: /AZ-32/ }).click()
+  await page.getByRole('button', { name: side }).click()
+  await expect(page.getByText('모드:')).toContainText('AZ-32', { timeout: 60000 })
+}
+
 test.describe('Reversix public UI', () => {
-  test('renders all labelled board buttons and the initial turn', async ({ page }) => {
+  test('greets a visitor with the opponent chooser', async ({ page }) => {
     await page.goto('/')
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByRole('heading', { name: '새 게임' })).toBeVisible()
+    await expect(dialog.getByRole('button', { name: '2인 대전' })).toBeVisible()
+    await expect(dialog.getByRole('button', { name: /AZ-32/ })).toBeVisible()
+    // it is modal: the board behind it cannot be played until a mode is chosen
+    await expect(page.locator('button[role="gridcell"]').nth(34)).not.toBeFocused()
+    await dialog.getByRole('button', { name: '2인 대전' }).click()
+    await expect(dialog).toBeHidden()
+    await expect(page.getByText('모드:')).toContainText('2인 대전')
+  })
+
+  test('renders all labelled board buttons and the initial turn', async ({ page }) => {
+    await startTwoPlayer(page)
     await expect(page.getByText('현재 플레이어:')).toContainText('흑')
     await expect(page.getByText('필요한 배치:')).toContainText('1')
     await expect(page.locator('button[role="gridcell"][aria-label]')).toHaveCount(100)
   })
 
   test('alternates light and dark backgrounds across adjacent cells', async ({ page }) => {
-    await page.goto('/')
+    await startTwoPlayer(page)
     const backgrounds = await page.locator('[role="gridcell"]').evaluateAll(cells =>
       [0, 1, 10, 11].map(index => getComputedStyle(cells[index]).backgroundColor),
     )
@@ -19,7 +56,7 @@ test.describe('Reversix public UI', () => {
   })
 
   test('fills cells with stones and centers contrasting placement numbers', async ({ page }) => {
-    await page.goto('/')
+    await startTwoPlayer(page)
     const black = page.getByRole('gridcell', { name: /E5 백돌/ })
     const white = page.getByRole('gridcell', { name: /F5 흑돌/ })
     for (const stone of [black, white]) {
@@ -41,7 +78,7 @@ test.describe('Reversix public UI', () => {
   })
 
   test('places legal black stones, resets, and commits a turn', async ({ page }) => {
-    await page.goto('/')
+    await startTwoPlayer(page)
     const cell = page.getByRole('gridcell', { name: /E4 빈 칸/ })
     await cell.click()
     await expect(page.getByText('현재 배치:')).toContainText('1')
@@ -56,7 +93,7 @@ test.describe('Reversix public UI', () => {
   })
 
   test('cancels only the latest provisional stone', async ({ page }) => {
-    await page.goto('/')
+    await startTwoPlayer(page)
     await page.getByRole('gridcell', { name: /E4 빈 칸/ }).click()
     await page.getByRole('button', { name: '턴 확정' }).click()
     await page.locator('.is-legal').first().click()
@@ -74,7 +111,7 @@ test.describe('Reversix public UI', () => {
   })
 
   test('animates provisional flips between the original and new colors', async ({ page }) => {
-    await page.goto('/')
+    await startTwoPlayer(page)
     await page.getByRole('gridcell', { name: /E4 빈 칸/ }).click()
     const blackFlip = page.getByRole('gridcell', { name: /E5 흑돌/ })
     await expect(blackFlip).toHaveClass(/is-flipping-to-black/)
@@ -98,7 +135,7 @@ test.describe('Reversix public UI', () => {
   })
 
   test('keeps all provisional flip animations in the same phase', async ({ page }) => {
-    await page.goto('/')
+    await startTwoPlayer(page)
     await page.getByRole('gridcell', { name: /E4 빈 칸/ }).click()
     await page.getByRole('button', { name: '턴 확정' }).click()
     await page.locator('.is-legal').first().click()
@@ -112,7 +149,7 @@ test.describe('Reversix public UI', () => {
   })
 
   test('opens and closes the rules dialog', async ({ page }) => {
-    await page.goto('/')
+    await startTwoPlayer(page)
     const rulesButton = page.getByRole('button', { name: '규칙' })
     await rulesButton.click()
     const dialog = page.getByRole('dialog')
@@ -129,7 +166,7 @@ test.describe('Reversix public UI', () => {
   })
 
   test('pages through the rules with the buttons and arrow keys', async ({ page }) => {
-    await page.goto('/')
+    await startTwoPlayer(page)
     await page.getByRole('button', { name: '규칙' }).click()
     const dialog = page.getByRole('dialog')
     const prev = dialog.getByRole('button', { name: '이전' })
@@ -163,7 +200,7 @@ test.describe('Reversix public UI', () => {
   })
 
   test('confirms a destructive new game with Cancel focused first', async ({ page }) => {
-    await page.goto('/')
+    await startTwoPlayer(page)
     await page.getByRole('gridcell', { name: /E4 빈 칸/ }).click()
     await page.getByRole('button', { name: '새 게임' }).click()
     const dialog = page.getByRole('dialog')
@@ -175,7 +212,7 @@ test.describe('Reversix public UI', () => {
   })
 
   test('marks the human own move as black in two-player mode', async ({ page }) => {
-    await page.goto('/')
+    await startTwoPlayer(page)
     await page.locator('button[role="gridcell"]').nth(34).click()
     await page.getByRole('button', { name: '턴 확정' }).click()
     await expect(page.getByText('현재 플레이어:')).toContainText('백')
@@ -187,10 +224,7 @@ test.describe('Reversix public UI', () => {
   })
 
   test('lets the human take white and moves the computer first', async ({ page }) => {
-    await page.goto('/')
-    await page.getByRole('button', { name: '새 게임' }).click()
-    await page.getByRole('button', { name: /AZ-32/ }).click()
-    await page.getByRole('button', { name: /후공/ }).click()
+    await startVsAgent(page, /후공/)
     await expect(page.getByText('모드:')).toContainText('나는 백')
     // black is the computer here, so it opens on its own and hands the turn to us
     await expect(page.getByText('현재 플레이어:')).toContainText('흑')
@@ -199,7 +233,7 @@ test.describe('Reversix public UI', () => {
   })
 
   test('can step back from the side choice to the opponent list', async ({ page }) => {
-    await page.goto('/')
+    await startTwoPlayer(page)
     await page.getByRole('button', { name: '새 게임' }).click()
     await page.getByRole('button', { name: /AZ-32/ }).click()
     await expect(page.getByRole('heading', { name: '선공 · 후공' })).toBeVisible()
@@ -208,7 +242,7 @@ test.describe('Reversix public UI', () => {
   })
 
   test('supports keyboard board navigation', async ({ page }) => {
-    await page.goto('/')
+    await startTwoPlayer(page)
     const first = page.locator('button[role="gridcell"]').first()
     await first.focus()
     await first.press('ArrowRight')
@@ -216,7 +250,7 @@ test.describe('Reversix public UI', () => {
   })
 
   test('places with Enter and Space while retaining cell focus', async ({ page }) => {
-    await page.goto('/')
+    await startTwoPlayer(page)
     const cells = page.locator('button[role="gridcell"]')
     await cells.nth(10).focus()
     await page.keyboard.press('Enter')
@@ -233,7 +267,7 @@ test.describe('Reversix public UI', () => {
   })
 
   test('marks and accepts only legal placements', async ({ page }) => {
-    await page.goto('/')
+    await startTwoPlayer(page)
     const legal = page.getByRole('gridcell', { name: /E4 빈 칸/ })
     const illegal = page.getByRole('gridcell', { name: /A1 빈 칸/ })
     await expect(page.locator('.is-legal')).toHaveCount(4)
@@ -246,7 +280,7 @@ test.describe('Reversix public UI', () => {
   })
 
   test('keeps arrow navigation within all four board edges', async ({ page }) => {
-    await page.goto('/')
+    await startTwoPlayer(page)
     const cells = page.locator('button[role="gridcell"]')
     const last = await cells.count() - 1
     for (const [index, key] of [[0, 'ArrowLeft'], [9, 'ArrowRight'], [90, 'ArrowDown'], [last, 'ArrowDown']]) {
@@ -258,7 +292,7 @@ test.describe('Reversix public UI', () => {
 
   test('keeps the board reachable at narrow viewport without document overflow', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 })
-    await page.goto('/')
+    await startTwoPlayer(page)
     await expect(page.locator('html')).toHaveJSProperty('scrollWidth', 375)
     const wrapper = page.locator('.board-wrapper')
     await expect(wrapper).toBeVisible()
@@ -274,14 +308,14 @@ test.describe('Reversix public UI', () => {
   })
 
   test('accepts the browser reload notice when present', async ({ page }) => {
-    await page.goto('/')
+    await startTwoPlayer(page)
     page.on('dialog', dialog => dialog.accept())
     await page.reload()
     await expect(page.getByText('현재 플레이어:')).toContainText('흑')
   })
 
   test('serves built assets and does not rewrite missing paths', async ({ page, request }) => {
-    await page.goto('/')
+    await startTwoPlayer(page)
     const asset = await page.locator('script[type="module"]').getAttribute('src')
     const assetResponse = await request.get(asset)
     expect(assetResponse.status()).toBe(200)
@@ -291,11 +325,7 @@ test.describe('Reversix public UI', () => {
   })
 
   test('plays a full turn as the trained network', async ({ page }) => {
-    await page.goto('/')
-    await page.getByRole('button', { name: '새 게임' }).click()
-    await page.getByRole('button', { name: /AZ-32/ }).click()
-    await page.getByRole('button', { name: /선공/ }).click()
-    await expect(page.getByText('모드:')).toContainText('AZ-32', { timeout: 20000 })
+    await startVsAgent(page)
     await page.getByRole('gridcell', { name: /E4 빈 칸/ }).click()
     await page.getByRole('button', { name: '턴 확정' }).click()
     await expect(page.getByText('현재 플레이어:')).toContainText('흑', { timeout: 120000 })
@@ -303,11 +333,7 @@ test.describe('Reversix public UI', () => {
   })
 
   test('shows search progress and places the two stones separately', async ({ page }) => {
-    await page.goto('/')
-    await page.getByRole('button', { name: '새 게임' }).click()
-    await page.getByRole('button', { name: /AZ-32/ }).click()
-    await page.getByRole('button', { name: /선공/ }).click()
-    await expect(page.getByText('모드:')).toContainText('AZ-32', { timeout: 20000 })
+    await startVsAgent(page)
     await page.getByRole('gridcell', { name: /E4 빈 칸/ }).click()
     await page.getByRole('button', { name: '턴 확정' }).click()
     // the search reports progress while it runs
@@ -319,11 +345,7 @@ test.describe('Reversix public UI', () => {
 
   test('marks the stones the opponent just placed', async ({ page }) => {
     test.setTimeout(180000)
-    await page.goto('/')
-    await page.getByRole('button', { name: '새 게임' }).click()
-    await page.getByRole('button', { name: /AZ-32/ }).click()
-    await page.getByRole('button', { name: /선공/ }).click()
-    await expect(page.getByText('모드:')).toContainText('AZ-32', { timeout: 60000 })
+    await startVsAgent(page)
     await page.getByRole('gridcell', { name: /E4 빈 칸/ }).click()
     await page.getByRole('button', { name: '턴 확정' }).click()
     await expect(page.getByText('현재 플레이어:')).toContainText('백')
@@ -348,7 +370,7 @@ test.describe('Reversix public UI', () => {
   })
 
   test('marks a cell that would hand the opponent a SIX, but only for the closing stone', async ({ page }) => {
-    await page.goto('/')
+    await startTwoPlayer(page)
     // a real line; the ban appears while choosing the SECOND stone of the turn
     const moves = [34,35,43,56,25,64,16,33,53,65,52,46,51,61,67,36,42,31,41,40,22,37]
     const cells = page.locator('button[role="gridcell"]')
@@ -373,7 +395,7 @@ test.describe('Reversix public UI', () => {
   })
 
   test('shows no ban while choosing the first of two stones', async ({ page }) => {
-    await page.goto('/')
+    await startTwoPlayer(page)
     const cells = page.locator('button[role="gridcell"]')
     await cells.nth(34).click()
     await page.getByRole('button', { name: '턴 확정' }).click()      // Black's opening
@@ -385,7 +407,7 @@ test.describe('Reversix public UI', () => {
 
   test('lets a doomed first stone be tried, but not committed', async ({ page }) => {
     test.setTimeout(120000)
-    await page.goto('/')
+    await startTwoPlayer(page)
     // White reaches a position whose only three legal cells each shrink a black overline
     // into a six. Every turn from here is banned, so White has to pass — and must be able
     // to SEE that by trying a stone, not just stare at a board with nothing marked.
@@ -417,7 +439,7 @@ test.describe('Reversix public UI', () => {
 
   test('explains why the game ended', async ({ page }) => {
     test.setTimeout(120000)
-    await page.goto('/')
+    await startTwoPlayer(page)
     // two-player mode: no thinking time, so a whole game fits in the budget
     for (let turn = 0; turn < 400; turn++) {
       if (await page.getByText('게임 종료:').count()) break
@@ -433,11 +455,7 @@ test.describe('Reversix public UI', () => {
 
   test('blocks board input while the computer is to move', async ({ page }) => {
     test.setTimeout(180000)
-    await page.goto('/')
-    await page.getByRole('button', { name: '새 게임' }).click()
-    await page.getByRole('button', { name: /AZ-32/ }).click()
-    await page.getByRole('button', { name: /선공/ }).click()
-    await expect(page.getByText('모드:')).toContainText('AZ-32', { timeout: 60000 })
+    await startVsAgent(page)
     await page.getByRole('gridcell', { name: /E4 빈 칸/ }).click()
     await page.getByRole('button', { name: '턴 확정' }).click()
     await expect(page.getByText('현재 플레이어:')).toContainText('백')

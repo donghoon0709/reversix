@@ -40,7 +40,7 @@ const coord = cell => `${String.fromCharCode(65 + (cell % BOARD_SIZE))}${Math.fl
 export default function App() {
   const [state, dispatch] = useReducer(reduceGame, undefined, createInitialGame)
   const [rulesOpen, setRulesOpen] = useState(false)
-  const [modeOpen, setModeOpen] = useState(false)
+  const [modeOpen, setModeOpen] = useState(true)     // the opponent chooser greets the visitor
   const [mode, setMode] = useState('human')
   const [humanSide, setHumanSide] = useState(BLACK)
   const [thinking, setThinking] = useState(false)
