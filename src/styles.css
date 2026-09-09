@@ -229,6 +229,40 @@ textarea:focus-visible,
   outline-offset: -3px;
 }
 
+/* A ghost stone previewing a candidate move. It is a real element (not ::after,
+   which already draws the actual stone once a cell is occupied), sized a little
+   smaller than the cell and only partly opaque so it reads as a suggestion. */
+.hint-stone {
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.hint-stone-black { background: rgb(23 32 51 / 55%); }
+.hint-stone-white { background: rgb(255 255 255 / 75%); border: 2px solid rgb(23 32 51 / 55%); }
+
+.is-hint-2 .hint-stone,
+.is-hint-3 .hint-stone {
+  opacity: 0.6;
+}
+
+/* A hinted cell already shows the ghost stone, so the blue legal-move dot would
+   just sit on top of it — suppress it here. */
+.is-hint.is-legal::after {
+  content: none;
+}
+
+/* Rank 1 gets a green ring so the best move stands out from the other two hints.
+   The board squares are themselves green (#dce8c5 light, #769656 dark), so a bare
+   green ring would disappear on the dark squares; a white frame just outside the
+   green keeps it visible on both. Checked against both square colors and against
+   .is-last-move (amber) and .is-winning (red), which use different colors and never
+   land on the same (empty, hinted) cell as this ring in practice. */
+.is-hint-1 {
+  box-shadow: inset 0 0 0 2px #fff, inset 0 0 0 5px #22c55e;
+}
+
 .dialog-backdrop {
   position: fixed;
   inset: 0;
@@ -558,4 +592,82 @@ button.control:disabled {
   color: #172033;
   background: #fff;
   resize: vertical;
+}
+
+/* Visually hidden but still announced by a screen reader. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.eval-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  border: 1px solid rgb(23 32 51 / 20%);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  background: #fff;
+}
+
+.eval-panel-stale {
+  opacity: 0.6;
+}
+
+.eval-bar {
+  display: flex;
+  overflow: hidden;
+  height: 0.75rem;
+  border-radius: 999px;
+  background: #dce8c5;
+}
+
+.eval-bar-black {
+  background: #172033;
+}
+
+.eval-bar-white {
+  background: #fff;
+  border-left: 1px solid rgb(23 32 51 / 20%);
+}
+
+.eval-value {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.eval-stale-mark {
+  font-weight: 400;
+  opacity: 0.75;
+}
+
+.eval-caveat {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #b45309;
+}
+
+.eval-hints {
+  margin: 0;
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+
+.practice-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.practice-toggle input {
+  width: 1.1rem;
+  height: 1.1rem;
 }
