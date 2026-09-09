@@ -525,3 +525,37 @@ button.control:disabled {
   font-variant-numeric: tabular-nums;
   opacity: 0.85;
 }
+
+/* Save controls sit in the header next to 규칙 / 새 게임; the link input needs room to
+   show a real value, so it grows rather than clipping to the button width. */
+.save-controls {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.share-link-input {
+  flex: 1 1 12rem;
+  min-width: 8rem;
+  min-height: 44px;
+  border: 1px solid #64748b;
+  border-radius: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  color: #172033;
+  background: #fff;
+}
+
+.copy-status {
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.record-paste {
+  width: 100%;
+  margin: 0.5rem 0;
+  border: 1px solid #64748b;
+  border-radius: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  color: #172033;
+  background: #fff;
+  resize: vertical;
+}
